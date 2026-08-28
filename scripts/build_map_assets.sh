@@ -47,6 +47,16 @@ die() {
     exit 1
 }
 
+# Print the MD5 hex of a file. GNU systems have md5sum; stock macOS ships
+# BSD md5 instead, so accept either rather than demanding coreutils.
+md5_hex() {
+    if command -v md5sum >/dev/null 2>&1; then
+        md5sum "$1" | awk '{print $1}'
+    else
+        md5 -q "$1"
+    fi
+}
+
 # Download to a .part file and move it into place only on success, so an
 # interrupted or failed transfer never leaves a truncated file that the next
 # run mistakes for a complete one. Retries cover transient 5xx (502/503/504),
@@ -57,7 +67,7 @@ fetch() {
     local part="$out.part"
     local code rc=0 diagnosis
 
-    echo "Downloading $what…"
+    echo "Downloading $what..."
     echo "  $url"
     # stderr is left alone so the progress meter and curl's own error line
     # reach the terminal; we classify from the exit code and HTTP status.
@@ -73,23 +83,23 @@ fetch() {
     fi
     rm -f "$part"
     case "$code" in
-        5*) diagnosis="HTTP $code — the server answered but failed. That is
+        5*) diagnosis="HTTP $code -- the server answered but failed. That is
 load or maintenance at their end, not a problem with your setup, and it
 usually clears on its own within minutes." ;;
-        429) diagnosis="HTTP 429 — rate limited. Wait a few minutes." ;;
-        404) diagnosis="HTTP 404 — not found. The URL moved, or a version
+        429) diagnosis="HTTP 429 -- rate limited. Wait a few minutes." ;;
+        404) diagnosis="HTTP 404 -- not found. The URL moved, or a version
 pinned in this script has gone stale." ;;
-        401 | 403) diagnosis="HTTP $code — access denied. Usually a proxy or
+        401 | 403) diagnosis="HTTP $code -- access denied. Usually a proxy or
 network filter rather than the host itself." ;;
         000 | "")
             case "$rc" in
                 6) diagnosis="DNS lookup failed (curl 6)." ;;
-                7) diagnosis="Could not connect (curl 7) — firewall or proxy." ;;
+                7) diagnosis="Could not connect (curl 7) -- firewall or proxy." ;;
                 28) diagnosis="Timed out (curl 28)." ;;
-                35 | 60) diagnosis="TLS failed (curl $rc) — often TLS
+                35 | 60) diagnosis="TLS failed (curl $rc) -- often TLS
 interception by a corporate proxy presenting its own certificate." ;;
                 *) diagnosis="No HTTP response reached curl (exit $rc). A proxy
-can reject with its own status — 403 or 502 — before the real server is ever
+can reject with its own status -- 403 or 502 -- before the real server is ever
 contacted, so the status in curl's line above may be the proxy's, not the
 download host's." ;;
             esac
@@ -115,9 +125,11 @@ What you can do:
 # Check every tool up front: discovering a missing one after a 94 MB download
 # (or twenty minutes into tiling) wastes real time.
 missing=()
-for tool in curl osmium md5sum; do
+for tool in curl osmium; do
     command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 done
+command -v md5sum >/dev/null 2>&1 || command -v md5 >/dev/null 2>&1 \
+    || missing+=("md5sum or md5")
 
 JAVA_MIN=21
 if [[ "${SKIP_TILES:-0}" != "1" ]]; then
@@ -131,13 +143,13 @@ if [[ "${SKIP_TILES:-0}" != "1" ]]; then
             die "Planetiler needs Java $JAVA_MIN+, but 'java' here is $java_major.
   macOS:          brew install openjdk@$JAVA_MIN
   Debian/Ubuntu:  sudo apt-get install openjdk-${JAVA_MIN}-jre
-Then re-run — the extract is already downloaded, so this is quick.
+Then re-run -- the extract is already downloaded, so this is quick.
 Or skip the basemap for now:  SKIP_TILES=1 $0"
         fi
     fi
 fi
 
-if (( ${#missing[@]} )); then
+if (( ${#missing[@]} > 0 )); then
     die "missing required tool(s): ${missing[*]}
   macOS:          brew install osmium-tool curl coreutils openjdk@$JAVA_MIN
   Debian/Ubuntu:  sudo apt-get install osmium-tool curl coreutils default-jre
@@ -154,12 +166,12 @@ fi
 # Integrity: Geofabrik publishes an .md5 next to every extract. Verify the
 # download instead of trusting the pipe blindly.
 if [[ "${SKIP_CHECKSUM:-0}" == "1" ]]; then
-    echo "!! SKIP_CHECKSUM=1 — using $RAW UNVERIFIED."
+    echo "!! SKIP_CHECKSUM=1 -- using $RAW UNVERIFIED."
 elif [[ -n "${EXTRACT_URL:-}" ]]; then
     echo "Custom EXTRACT_URL set; skipping the Geofabrik checksum."
-    echo "   Verify your source yourself — see SECURITY.md."
+    echo "   Verify your source yourself -- see SECURITY.md."
 else
-    echo "Verifying extract checksum…"
+    echo "Verifying extract checksum..."
     if ! curl -fsSL --retry "$RETRIES" --retry-delay 3 --connect-timeout 20 \
         "$GEOFABRIK.md5" -o "$DATA/berlin-latest.osm.pbf.md5"; then
         die "downloaded the extract but could not fetch its checksum from
@@ -168,28 +180,32 @@ Re-run in a few minutes (the extract is kept, so this is quick). To verify by
 hand:  md5sum $RAW   and compare against the .md5 published next to the file.
 To proceed without verification (understand the risk):  SKIP_CHECKSUM=1 $0"
     fi
-    # The published file is "<md5>  berlin-latest.osm.pbf"; point it at our path.
-    if ! awk -v f="$RAW" '{print $1 "  " f}' "$DATA/berlin-latest.osm.pbf.md5" \
-        | md5sum -c -; then
+    # The published file is "<md5>  berlin-latest.osm.pbf"; we only want the hex.
+    published="$(awk '{print $1}' "$DATA/berlin-latest.osm.pbf.md5")"
+    actual="$(md5_hex "$RAW")"
+    if [[ -z "$published" || "$published" != "$actual" ]]; then
         die "checksum mismatch for $RAW
+  published: ${published:-<none found>}
+  actual:    $actual
 The download is corrupt or was tampered with. Delete it and re-run:
   rm $RAW && $0"
     fi
+    echo "  OK ($actual)"
 fi
 
 # --- 2. Routing + camera snapshot -------------------------------------------
-echo "Filtering to walkable streets + surveillance nodes…"
+echo "Filtering to walkable streets + surveillance nodes..."
 osmium tags-filter --overwrite "$RAW" \
     w/highway n/man_made=surveillance \
     -o "$ROUTING" \
     || die "osmium could not filter $RAW (is the file complete?)"
 osmium fileinfo -e "$ROUTING" | sed -n 's/^  Number of/  /p' || true
 cp "$ROUTING" "$ASSETS/berlin-routing.osm.pbf"
-echo "→ $ROUTING (bundled into app assets)"
+echo "-> $ROUTING (bundled into app assets)"
 
 # --- 3. Offline basemap tiles ------------------------------------------------
 if [[ "${SKIP_TILES:-0}" == "1" ]]; then
-    echo "SKIP_TILES=1 — skipping basemap generation."
+    echo "SKIP_TILES=1 -- skipping basemap generation."
     echo "The app builds and routes without tiles; the map draws on a plain"
     echo "background until you re-run without SKIP_TILES."
     exit 0
@@ -199,7 +215,7 @@ if [[ ! -f "$PLANETILER_JAR" ]]; then
     fetch "$PLANETILER_URL" "$PLANETILER_JAR" "Planetiler $PLANETILER_VERSION"
 fi
 
-echo "Rendering Berlin vector tiles (this takes a few minutes)…"
+echo "Rendering Berlin vector tiles (this takes a few minutes)..."
 java -Xmx3g -jar "$PLANETILER_JAR" \
     --osm-path="$RAW" \
     --output="$TILES" \
@@ -211,7 +227,7 @@ java -Xmx3g -jar "$PLANETILER_JAR" \
 raise -Xmx. To get a working app without tiles for now:  SKIP_TILES=1 $0"
 
 cp "$TILES" "$ASSETS/berlin.pmtiles"
-echo "→ $TILES (bundled into app assets)"
+echo "-> $TILES (bundled into app assets)"
 
 echo
 echo "Done. Rebuild the app with:  ./gradlew :app:assembleDebug"
