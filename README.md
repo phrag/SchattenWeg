@@ -54,6 +54,20 @@ SDK/NDK, JDK 17+, and (for the data pipeline) `osmium` + Java for Planetiler.
    ```bash
    ./scripts/build_map_assets.sh     # → data/berlin-routing.osm.pbf + offline tiles
    ```
+   It downloads ~70 MB from Geofabrik, verifies it against the published MD5,
+   filters it, and renders tiles with Planetiler. Finished files are kept, so
+   re-running after a failure only fetches what's missing.
+
+   If a download fails, the error names the step, the URL and the HTTP status.
+   A `5xx` is the download host having a bad day — wait and re-run. Useful
+   knobs:
+
+   | Variable | Effect |
+   |---|---|
+   | `EXTRACT_URL=<url>` | Fetch the extract from a mirror instead |
+   | `SKIP_TILES=1` | Stop after the routing snapshot — the app still routes, on a plain background |
+   | `PLANETILER_VERSION=vX.Y.Z` | Pin a different Planetiler release |
+   | `RETRIES=<n>` | Download attempts per file (default 5) |
 
 2. **Core tests** (pure Rust, no Android needed)
    ```bash

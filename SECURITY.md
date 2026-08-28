@@ -72,7 +72,13 @@ any pushed key as burned.
 - CI fails the build if any Play Services / Firebase artifact appears in the
   dependency tree.
 - `scripts/build_map_assets.sh` verifies the Geofabrik download against the
-  published MD5 before using it.
+  published MD5 before using it. Two escape hatches deliberately weaken that
+  and both say so loudly when used: `SKIP_CHECKSUM=1`, and `EXTRACT_URL=<url>`
+  (a mirror has no Geofabrik checksum to compare against — verify such a
+  source yourself).
+- The Planetiler JAR is downloaded from its GitHub release without checksum
+  verification — a known gap. Pin and verify it if your threat model includes
+  a compromised release asset.
 - The map data pipeline is the only network step in the project, and it runs
   on a build machine — never on the phone.
 - Maintainers with network access to Gradle's CDN should add
