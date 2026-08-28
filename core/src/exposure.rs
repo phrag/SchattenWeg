@@ -12,6 +12,7 @@
 //! in a comment for clarity.
 
 use crate::camera::{haversine_m, Camera};
+use std::collections::HashMap;
 
 /// A node in the routing graph — just a coordinate plus its stable id.
 #[derive(Debug, Clone, Copy, uniffi::Record)]
@@ -81,24 +82,55 @@ fn edge_exposure(
     covered as f64 / (steps as f64 + 1.0)
 }
 
-/// Spatial index over cameras so exposure scoring doesn't go quadratic.
+/// Metres per degree of latitude (and of longitude at the equator).
+const M_PER_DEG_LAT: f64 = 111_320.0;
+
+/// Spatial index over cameras so exposure scoring doesn't go quadratic
+/// (~10⁶ edge samples × 10³ cameras in Berlin).
 ///
-/// This is a deliberately dumb uniform grid: bucket cameras by a coarse
-/// lat/lon cell, and when querying a point only test cameras in the 3×3 block
-/// of cells around it. At Berlin's camera density this is plenty; swap in an
-/// R-tree (`rstar`) later if a city ever gets pathological.
+/// A deliberately dumb uniform grid: cameras are bucketed into lat/lon cells
+/// sized to the maximum camera range, so any camera that could cover a query
+/// point lives in the 3×3 block of cells around it. At Berlin's camera density
+/// this is plenty; swap in an R-tree (`rstar`) later if a city ever gets
+/// pathological.
 pub struct CameraIndex {
     cameras: Vec<Camera>,
-    // Max camera range seen, used to size the query neighbourhood.
-    max_range_m: f64,
+    grid: HashMap<(i32, i32), Vec<u32>>,
+    cell_lat_deg: f64,
+    cell_lon_deg: f64,
 }
 
 impl CameraIndex {
     pub fn new(cameras: Vec<Camera>) -> Self {
-        let max_range_m = cameras.iter().map(|c| c.range_m).fold(0.0_f64, f64::max);
+        let max_range_m = cameras
+            .iter()
+            .map(|c| c.range_m)
+            .fold(0.0_f64, f64::max)
+            .max(1.0);
+        // Longitude degrees shrink with latitude; size cells for the camera
+        // set's own latitude band so a cell is never narrower than max range.
+        let mean_lat = if cameras.is_empty() {
+            0.0
+        } else {
+            cameras.iter().map(|c| c.lat).sum::<f64>() / cameras.len() as f64
+        };
+        let cell_lat_deg = max_range_m / M_PER_DEG_LAT;
+        let cell_lon_deg = max_range_m / (M_PER_DEG_LAT * mean_lat.to_radians().cos().max(0.01));
+
+        let mut grid: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
+        for (i, cam) in cameras.iter().enumerate() {
+            let key = (
+                (cam.lat / cell_lat_deg).floor() as i32,
+                (cam.lon / cell_lon_deg).floor() as i32,
+            );
+            grid.entry(key).or_default().push(i as u32);
+        }
+
         Self {
             cameras,
-            max_range_m,
+            grid,
+            cell_lat_deg,
+            cell_lon_deg,
         }
     }
 
@@ -110,15 +142,24 @@ impl CameraIndex {
         self.cameras.is_empty()
     }
 
-    /// True if any camera covers this point.
-    ///
-    /// TODO(perf): replace this linear scan with the grid described above once
-    /// the graph is wired up and we have real timing numbers. Kept linear here
-    /// so the scaffold is obviously correct; `max_range_m` is already tracked
-    /// so a bounding-box prefilter is a one-line change.
+    /// True if any camera covers this point. The hot inner call of the
+    /// exposure pass: only the 3×3 grid neighbourhood is tested.
     pub fn any_covers(&self, lat: f64, lon: f64) -> bool {
-        let _ = self.max_range_m; // used by the future grid prefilter
-        self.cameras.iter().any(|c| c.covers(lat, lon))
+        let ci = (lat / self.cell_lat_deg).floor() as i32;
+        let cj = (lon / self.cell_lon_deg).floor() as i32;
+        for di in -1..=1 {
+            for dj in -1..=1 {
+                if let Some(bucket) = self.grid.get(&(ci + di, cj + dj)) {
+                    if bucket
+                        .iter()
+                        .any(|&i| self.cameras[i as usize].covers(lat, lon))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     /// All cameras within `radius_m` of a point — handy for the map layer
@@ -154,6 +195,27 @@ mod tests {
         let idx = CameraIndex::new(vec![dome_at(52.60, 13.50, 20.0)]);
         let e = edge_exposure(52.52, 13.40, 52.52, 13.41, 700.0, &idx);
         assert_eq!(e, 0.0);
+    }
+
+    #[test]
+    fn grid_matches_linear_scan() {
+        // A scatter of cameras around central Berlin; the grid must agree with
+        // a brute-force scan everywhere, including cell boundaries.
+        let mut cams = Vec::new();
+        for k in 0..60u32 {
+            let lat = 52.50 + f64::from(k % 10) * 0.0012;
+            let lon = 13.38 + f64::from(k / 10) * 0.0018;
+            cams.push(dome_at(lat, lon, 25.0));
+        }
+        let idx = CameraIndex::new(cams.clone());
+        for i in 0..40 {
+            for j in 0..40 {
+                let lat = 52.499 + f64::from(i) * 0.0004;
+                let lon = 13.379 + f64::from(j) * 0.0006;
+                let linear = cams.iter().any(|c| c.covers(lat, lon));
+                assert_eq!(idx.any_covers(lat, lon), linear, "at {lat},{lon}");
+            }
+        }
     }
 
     #[test]

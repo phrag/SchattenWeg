@@ -1,22 +1,30 @@
 //! OSM ingest.
 //!
-//! Two jobs, both fed from a Geofabrik `.osm.pbf` extract of Berlin (or a live
-//! Overpass dump — same tag semantics):
+//! Two jobs, both fed from a Geofabrik `.osm.pbf` extract of Berlin (or the
+//! pre-filtered snapshot produced by `scripts/build_map_assets.sh` — same tag
+//! semantics):
 //!   1. pull `man_made=surveillance` nodes into [`Camera`]s
 //!   2. build the walkable road graph from `highway=*` ways
 //!
-//! The parsing itself is left as `todo!()` — wire up the `osmpbf` crate here.
-//! What this module pins down is the **tag → model mapping**, which is the part
-//! that's easy to get subtly wrong and is documented in CLAUDE.md.
+//! The **tag → model mapping** is the part that's easy to get subtly wrong;
+//! it is documented in CLAUDE.md and pinned down by the tests here.
 
-use crate::camera::{defaults, Camera, CameraKind};
+use crate::camera::{defaults, haversine_m, Camera, CameraKind};
 use crate::exposure::{Edge, Node};
+use osmpbf::{Element, ElementReader};
+use std::collections::HashMap;
 
 /// Errors from reading/decoding an OSM extract.
 #[derive(Debug, thiserror::Error)]
 pub enum OsmError {
     #[error("could not read OSM extract: {0}")]
     Read(String),
+}
+
+impl From<osmpbf::Error> for OsmError {
+    fn from(e: osmpbf::Error) -> Self {
+        OsmError::Read(e.to_string())
+    }
 }
 
 /// Map OSM surveillance tags onto a [`Camera`]. Returns `None` for nodes that
@@ -29,8 +37,8 @@ pub enum OsmError {
 ///   * `camera:type=fixed|dome|panning`
 ///   * `camera:direction=<deg>`       — compass bearing, cone centre
 ///   * `surveillance=public|outdoor|indoor|traffic`
-pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(String, String)]) -> Option<Camera> {
-    let get = |k: &str| tags.iter().find(|(tk, _)| tk == k).map(|(_, v)| v.as_str());
+pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(&str, &str)]) -> Option<Camera> {
+    let get = |k: &str| tags.iter().find(|(tk, _)| *tk == k).map(|&(_, v)| v);
 
     if get("man_made") != Some("surveillance") {
         return None;
@@ -49,7 +57,7 @@ pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(String, String
         _ => CameraKind::Unknown,
     };
 
-    let direction_deg = get("camera:direction").and_then(|v| parse_direction(v));
+    let direction_deg = get("camera:direction").and_then(parse_direction);
 
     Some(Camera {
         osm_id,
@@ -82,34 +90,168 @@ fn parse_direction(v: &str) -> Option<f64> {
     Some(deg)
 }
 
-/// Parse an entire Berlin extract into the camera set. TODO: implement with
-/// `osmpbf::ElementReader`, filtering nodes by the tags above.
-pub fn load_cameras(_pbf_path: &str) -> Result<Vec<Camera>, OsmError> {
-    todo!("iterate osmpbf nodes, call camera_from_tags, collect Some(_)")
+/// Parse an entire extract into the camera set.
+pub fn load_cameras(pbf_path: &str) -> Result<Vec<Camera>, OsmError> {
+    let reader = ElementReader::from_path(pbf_path)?;
+    let mut cameras = Vec::new();
+    reader.for_each(|element| {
+        let (id, lat, lon, tags): (i64, f64, f64, Vec<(&str, &str)>) = match &element {
+            Element::Node(n) => (n.id(), n.lat(), n.lon(), n.tags().collect()),
+            Element::DenseNode(n) => (n.id(), n.lat(), n.lon(), n.tags().collect()),
+            _ => return,
+        };
+        if let Some(cam) = camera_from_tags(id, lat, lon, &tags) {
+            cameras.push(cam);
+        }
+    })?;
+    Ok(cameras)
 }
 
-/// Build the walkable graph. TODO: implement — collect `highway=*` ways that
-/// are foot-accessible, split them into per-segment [`Edge`]s with great-circle
-/// lengths, and emit the [`Node`] table. Respect `access`/`foot` tags.
-pub fn load_graph(_pbf_path: &str) -> Result<(Vec<Node>, Vec<Edge>), OsmError> {
-    todo!("iterate osmpbf ways with highway tag, emit nodes + edges")
+/// Is this `highway=*` way walkable on foot?
+///
+/// Whitelist of walkable classes plus the usual German-city access rules:
+/// explicit `foot=yes|designated|permissive` overrides restrictive `access`;
+/// `foot=no|private|use_sidepath` always excludes; `access=no|private` excludes
+/// unless foot explicitly allows. Cycleways only count when foot is allowed.
+fn foot_accessible(tags: &[(&str, &str)]) -> bool {
+    let get = |k: &str| tags.iter().find(|(tk, _)| *tk == k).map(|&(_, v)| v);
+
+    let Some(highway) = get("highway") else {
+        return false;
+    };
+
+    const WALKABLE: &[&str] = &[
+        "footway",
+        "path",
+        "pedestrian",
+        "steps",
+        "corridor",
+        "living_street",
+        "residential",
+        "service",
+        "track",
+        "bridleway",
+        "unclassified",
+        "tertiary",
+        "tertiary_link",
+        "secondary",
+        "secondary_link",
+        "primary",
+        "primary_link",
+        "road",
+    ];
+
+    let foot = get("foot");
+    let foot_allows = matches!(foot, Some("yes") | Some("designated") | Some("permissive"));
+
+    // Cycleways are foot-forbidden by default in Germany; include only when
+    // explicitly opened to pedestrians.
+    let class_ok = WALKABLE.contains(&highway) || (highway == "cycleway" && foot_allows);
+    if !class_ok {
+        return false;
+    }
+    if matches!(foot, Some("no") | Some("private") | Some("use_sidepath")) {
+        return false;
+    }
+    if matches!(get("access"), Some("no") | Some("private")) && !foot_allows {
+        return false;
+    }
+    true
+}
+
+/// Build the walkable graph: collect foot-accessible `highway=*` ways, split
+/// them into per-segment bidirectional [`Edge`]s with great-circle lengths,
+/// and emit the [`Node`] table for exactly the nodes those ways use.
+///
+/// Two streaming passes over the file: ways first (to learn which node ids we
+/// need), then nodes (to resolve coordinates). Order of element types inside
+/// the file therefore doesn't matter.
+pub fn load_graph(pbf_path: &str) -> Result<(Vec<Node>, Vec<Edge>), OsmError> {
+    // Pass 1: node-id sequences of every walkable way.
+    let reader = ElementReader::from_path(pbf_path)?;
+    let mut way_node_seqs: Vec<Vec<i64>> = Vec::new();
+    reader.for_each(|element| {
+        if let Element::Way(way) = element {
+            let tags: Vec<(&str, &str)> = way.tags().collect();
+            if foot_accessible(&tags) {
+                way_node_seqs.push(way.refs().collect());
+            }
+        }
+    })?;
+
+    let mut needed: HashMap<i64, Option<(f64, f64)>> = HashMap::new();
+    for seq in &way_node_seqs {
+        for &id in seq {
+            needed.insert(id, None);
+        }
+    }
+
+    // Pass 2: coordinates for exactly those nodes.
+    let reader = ElementReader::from_path(pbf_path)?;
+    reader.for_each(|element| {
+        let (id, lat, lon) = match &element {
+            Element::Node(n) => (n.id(), n.lat(), n.lon()),
+            Element::DenseNode(n) => (n.id(), n.lat(), n.lon()),
+            _ => return,
+        };
+        if let Some(slot) = needed.get_mut(&id) {
+            *slot = Some((lat, lon));
+        }
+    })?;
+
+    let nodes: Vec<Node> = needed
+        .iter()
+        .filter_map(|(&id, coord)| {
+            coord.map(|(lat, lon)| Node {
+                id: id as u64,
+                lat,
+                lon,
+            })
+        })
+        .collect();
+
+    let mut edges = Vec::new();
+    for seq in &way_node_seqs {
+        for pair in seq.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            // Ways can reference nodes missing from a clipped extract; skip
+            // those segments rather than inventing zero-length geometry.
+            let (Some(Some((alat, alon))), Some(Some((blat, blon)))) =
+                (needed.get(&a), needed.get(&b))
+            else {
+                continue;
+            };
+            let length_m = haversine_m(*alat, *alon, *blat, *blon);
+            // Walking is direction-agnostic: emit both directions.
+            edges.push(Edge {
+                from: a as u64,
+                to: b as u64,
+                length_m,
+                exposure: 0.0,
+            });
+            edges.push(Edge {
+                from: b as u64,
+                to: a as u64,
+                length_m,
+                exposure: 0.0,
+            });
+        }
+    }
+
+    Ok((nodes, edges))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn tag(k: &str, v: &str) -> (String, String) {
-        (k.to_string(), v.to_string())
-    }
-
     #[test]
     fn parses_fixed_directional_camera() {
-        let tags = vec![
-            tag("man_made", "surveillance"),
-            tag("surveillance:type", "camera"),
-            tag("camera:type", "fixed"),
-            tag("camera:direction", "90"),
+        let tags = [
+            ("man_made", "surveillance"),
+            ("surveillance:type", "camera"),
+            ("camera:type", "fixed"),
+            ("camera:direction", "90"),
         ];
         let cam = camera_from_tags(42, 52.52, 13.40, &tags).unwrap();
         assert_eq!(cam.kind, CameraKind::Fixed);
@@ -118,20 +260,40 @@ mod tests {
 
     #[test]
     fn drops_non_camera_surveillance() {
-        let tags = vec![
-            tag("man_made", "surveillance"),
-            tag("surveillance:type", "guard"),
-        ];
+        let tags = [("man_made", "surveillance"), ("surveillance:type", "guard")];
         assert!(camera_from_tags(1, 0.0, 0.0, &tags).is_none());
     }
 
     #[test]
     fn compass_point_direction() {
-        let tags = vec![
-            tag("man_made", "surveillance"),
-            tag("camera:direction", "SW"),
-        ];
+        let tags = [("man_made", "surveillance"), ("camera:direction", "SW")];
         let cam = camera_from_tags(1, 0.0, 0.0, &tags).unwrap();
         assert_eq!(cam.direction_deg, Some(225.0));
+    }
+
+    #[test]
+    fn footways_walkable_motorways_not() {
+        assert!(foot_accessible(&[("highway", "footway")]));
+        assert!(foot_accessible(&[("highway", "residential")]));
+        assert!(!foot_accessible(&[("highway", "motorway")]));
+        assert!(!foot_accessible(&[("highway", "trunk")]));
+    }
+
+    #[test]
+    fn foot_and_access_tags_respected() {
+        assert!(!foot_accessible(&[("highway", "path"), ("foot", "no")]));
+        assert!(!foot_accessible(&[
+            ("highway", "service"),
+            ("access", "private")
+        ]));
+        // Explicit foot permission overrides a restrictive access tag.
+        assert!(foot_accessible(&[
+            ("highway", "service"),
+            ("access", "private"),
+            ("foot", "yes"),
+        ]));
+        // Cycleways only when opened to pedestrians.
+        assert!(!foot_accessible(&[("highway", "cycleway")]));
+        assert!(foot_accessible(&[("highway", "cycleway"), ("foot", "yes")]));
     }
 }
