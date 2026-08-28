@@ -60,9 +60,17 @@ SDK/NDK, JDK 17+, and (for the data pipeline) `osmium` + Java for Planetiler.
    cd core && cargo test
    ```
 
-3. **Try routing from the terminal**
+3. **Try routing from the terminal** — sweeps λ so you can see the trade-off
    ```bash
    cd core && cargo run --release --example plan_route ../data/berlin-routing.osm.pbf
+   ```
+   No Berlin extract yet? The bundled test fixture works too:
+   ```bash
+   cd core && cargo run --release --example plan_route -- \
+       tests/fixtures/mini_berlin.osm.pbf 52.5200,13.4000 52.5200,13.4040
+   #     λ     length    exposure
+   #     0      271 m       15.0%     ← straight down the watched street
+   #     8      493 m        0.0%     ← detours around the camera
    ```
 
 4. **Build the app** (compiles the Rust core for Android and generates the
