@@ -1,0 +1,24 @@
+[package]
+name = "schattenweg-core"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "On-device CCTV-avoiding route planning for Berlin: OSM ingest, surveillance-exposure scoring, camera-aware A*."
+repository = "https://github.com/phrag/SchattenWeg"
+
+[lib]
+name = "schattenweg_core"
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+uniffi = { version = "0.32", features = ["cli"] }
+osmpbf = "0.3"
+thiserror = "2"
+
+[profile.release]
+lto = true
+strip = "debuginfo"

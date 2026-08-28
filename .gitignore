@@ -1,0 +1,35 @@
+# Rust
+target/
+Cargo.lock.orig
+
+# Raw / regenerable map data (the filtered snapshot in data/ IS committed;
+# see scripts/build_map_assets.sh)
+data/berlin-latest.osm.pbf
+data/*.geojson
+data/tiles/
+*.pmtiles
+*.mbtiles
+
+# Android / Gradle
+.gradle/
+build/
+local.properties
+captures/
+app/src/main/jniLibs/
+app/src/main/java/uniffi/
+app/src/main/assets/map/
+
+# Signing material — NEVER commit keys or keystore credentials
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+keystore.properties
+key.properties
+signing.properties
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store
