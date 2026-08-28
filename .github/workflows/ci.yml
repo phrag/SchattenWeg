@@ -95,3 +95,49 @@ jobs:
           name: schattenweg-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  hygiene:
+    name: No PII, paths or secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A surveillance-avoidance tool leaking its author's identity in the
+      # repo would be its own kind of joke. Tracked files must not carry
+      # developer usernames, machine-local paths, or credentials.
+      - name: Scan tracked files
+        run: |
+          fail=0
+
+          # Home directories and machine-local paths. The example keystore
+          # deliberately shows a placeholder absolute path, so it is exempt.
+          if git grep -nIE '/Users/[a-z0-9]|/home/[a-z0-9]|C:\\Users\\[A-Za-z0-9]|/opt/homebrew' \
+               -- . ':!keystore.properties.example' ':!.github/workflows/ci.yml'; then
+            echo "::error::machine-local path in a tracked file"
+            fail=1
+          fi
+
+          # Real email addresses. Anthropic's noreply and Android resource
+          # references (@string/, @drawable/, ...) are not addresses.
+          if git grep -nIE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . \
+               ':!.github/workflows/ci.yml' \
+               | grep -vE 'noreply@anthropic\.com|example\.com|@aar|@types'; then
+            echo "::error::email address in a tracked file"
+            fail=1
+          fi
+
+          # Credential material. Signing keys live outside the repo entirely.
+          if git grep -nIE 'BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}' \
+               -- . ':!.github/workflows/ci.yml'; then
+            echo "::error::secret-shaped string in a tracked file"
+            fail=1
+          fi
+
+          # Files that carry local paths or keys by their very nature.
+          if git ls-files | grep -E '(^|/)(local\.properties|keystore\.properties|\.DS_Store)$|\.(jks|keystore|p12|pem)$'; then
+            echo "::error::a file that must never be tracked is tracked"
+            fail=1
+          fi
+
+          [ "$fail" = 0 ] && echo "Clean: no PII, local paths or secrets in tracked files."
+          exit $fail

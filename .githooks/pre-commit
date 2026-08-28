@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# Block commits that would publish a developer's identity, machine-local
+# paths, or credentials. CI enforces the same rules, but CI only sees a
+# commit after it is pushed -- and a pushed secret is already public.
+#
+# Enable once per clone:
+#
+#     git config core.hooksPath .githooks
+#
+# Bypass for a single commit (be sure):  git commit --no-verify
+
+set -uo pipefail
+
+fail=0
+note() {
+    echo "pre-commit: $1" >&2
+    fail=1
+}
+
+# Only the staged content matters, and only text files.
+staged="$(git diff --cached --name-only --diff-filter=ACM)"
+[ -z "$staged" ] && exit 0
+
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    # The example keystore intentionally shows a placeholder absolute path.
+    [ "$f" = "keystore.properties.example" ] && continue
+    [ "$f" = ".githooks/pre-commit" ] && continue
+    [ "$f" = ".github/workflows/ci.yml" ] && continue
+    git diff --cached -- "$f" | grep -q '^Binary files' && continue
+
+    added="$(git diff --cached -U0 -- "$f" | grep '^+' | grep -v '^+++')"
+    [ -z "$added" ] && continue
+
+    if printf '%s' "$added" | grep -qE '/Users/[a-z0-9]|/home/[a-z0-9]|C:\\Users\\[A-Za-z0-9]|/opt/homebrew'; then
+        note "machine-local path in $f"
+    fi
+    if printf '%s' "$added" \
+        | grep -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' \
+        | grep -qvE 'noreply@anthropic\.com|example\.com|@aar|@types'; then
+        note "email address in $f"
+    fi
+    if printf '%s' "$added" \
+        | grep -qE 'BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}'; then
+        note "secret-shaped string in $f"
+    fi
+done <<< "$staged"
+
+# Files that carry local paths or keys by their nature.
+if printf '%s' "$staged" \
+    | grep -E '(^|/)(local\.properties|keystore\.properties|\.DS_Store)$|\.(jks|keystore|p12|pem)$'; then
+    note "a file that must never be committed is staged"
+fi
+
+if [ "$fail" -ne 0 ]; then
+    echo "pre-commit: commit blocked. Fix the above, or --no-verify if you are certain." >&2
+    exit 1
+fi
+exit 0

@@ -96,3 +96,32 @@ scaffolding.
 
 Open a GitHub issue for non-sensitive matters. For anything that would put
 users at risk if public, contact the maintainer privately first.
+
+## Keeping the repository clean of identity
+
+A tool for avoiding surveillance should not publish its author's identity.
+Tracked files must carry no developer usernames, machine-local paths
+(`/Users/<name>`, `/home/<name>`), email addresses, or credentials.
+
+Two layers enforce this:
+
+- **`.githooks/pre-commit`** blocks such content before it can leave the
+  machine. Enable it once per clone -- git does not run hooks from a repo
+  automatically, by design:
+
+  ```bash
+  git config core.hooksPath .githooks
+  ```
+
+- **The `hygiene` CI job** re-checks every push, so a clone without the hook
+  enabled still cannot land a violation on the branch.
+
+`local.properties` (which holds your SDK path), keystores, `keystore.properties`
+and `.DS_Store` are gitignored and additionally rejected by both layers if
+force-added. `keystore.properties.example` is exempt: its absolute path is a
+deliberate placeholder.
+
+Note that CI catches a leak only *after* a push, and anything pushed to a
+public remote should be treated as permanently disclosed -- forks and caches
+survive a later rewrite. The hook is the layer that actually prevents
+disclosure; the CI job is the backstop.

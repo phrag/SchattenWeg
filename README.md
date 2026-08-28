@@ -93,6 +93,17 @@ SDK/NDK, JDK 17+, and (for the data pipeline) `osmium` + Java for Planetiler.
    ./gradlew :app:assembleDebug
    ```
 
+## Contributing
+
+Enable the repo's hooks once per clone, so machine-local paths, email
+addresses and credentials cannot be committed:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+CI enforces the same rules on every push (the `hygiene` job).
+
 ## Privacy posture
 
 - **No Google Play Services, no Firebase, no analytics.** Targets de-Googled
