@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose draws everything; this just keeps the window dark from the
+         first frame and drops the system action bar. -->
+    <style name="Theme.Schattenweg" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#10141A</item>
+        <item name="android:statusBarColor">#10141A</item>
+        <item name="android:navigationBarColor">#10141A</item>
+    </style>
+</resources>
