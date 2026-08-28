@@ -2,13 +2,31 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Fail-closed hardening: everything is bundled, so the app needs NO
-         network. MapLibre's library manifest requests INTERNET; strip it in
-         the merge so any accidental socket throws instead of leaking.
-         ACCESS_NETWORK_STATE stays (MapLibre queries connectivity; it moves
-         no data). -->
+    <!-- Fail-closed hardening. MapLibre's library manifest requests INTERNET,
+         ACCESS_WIFI_STATE and both location permissions; the manifest merger
+         would hand them to us silently. We use none of them, so strip them:
+         with no INTERNET an accidental socket throws instead of leaking, and
+         the app asks for no dangerous permission at all.
+
+         ACCESS_NETWORK_STATE is deliberately kept — MapLibre's
+         ConnectivityReceiver calls ConnectivityManager and would hit a
+         SecurityException without it. It is a normal (non-dangerous)
+         permission and moves no data off the device.
+
+         If the map's location puck is ever enabled, re-add the location
+         permissions here as a conscious decision, and use the platform
+         LocationManager (GNSS) — never the Fused Location Provider. -->
     <uses-permission
         android:name="android.permission.INTERNET"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_WIFI_STATE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_COARSE_LOCATION"
         tools:node="remove" />
 
     <application

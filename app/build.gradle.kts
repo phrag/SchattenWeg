@@ -1,8 +1,33 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Release signing credentials come from an UNTRACKED keystore.properties in
+// the repo root, or from environment variables in CI. Never from git — both
+// the keystore and this properties file are gitignored, and the build simply
+// produces an unsigned release when they are absent.
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+fun signingValue(key: String, env: String): String? =
+    keystoreProperties.getProperty(key) ?: System.getenv(env)
+
+val releaseStoreFile = signingValue("storeFile", "SCHATTENWEG_STORE_FILE")
+val releaseStorePassword = signingValue("storePassword", "SCHATTENWEG_STORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "SCHATTENWEG_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "SCHATTENWEG_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
 
 android {
     namespace = "de.schattenweg.app"
@@ -16,14 +41,39 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                // Deliberately NOT the debug key: an APK signed with the
+                // public debug key would look signed while being trivially
+                // forgeable. Unsigned is the honest failure mode.
+                null
+            }
+        }
+        debug {
+            applicationIdSuffix = ".debug"
         }
     }
 

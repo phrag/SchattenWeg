@@ -73,6 +73,29 @@ self-defeating.** So everything sensitive is on-device.
   first-class target. A Play Services fallback was explicitly deferred.
 - **All map data bundled in the APK** (pre-filtered snapshot); the app declares
   no `INTERNET` permission.
+- **MapLibre 13.x renders with Vulkan** (its manifest marks Vulkan 1.0
+  required). Fine for the Pixel-class hardware GrapheneOS runs on. If older
+  non-Vulkan devices ever matter, switch the dependency to
+  `org.maplibre.gl:android-sdk-opengl`.
+- **PMTiles must be read from `filesDir`, not assets** — Android's asset
+  manager can't serve the byte-range reads PMTiles needs. `MapAssets` copies
+  both the tiles and the routing snapshot out on first launch.
+
+### Security decisions (see SECURITY.md for the full threat model)
+
+- MapLibre's library manifest brings `INTERNET`, `ACCESS_WIFI_STATE`,
+  `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION`. All four are **stripped
+  in the merge** (`tools:node="remove"`); only `ACCESS_NETWORK_STATE` stays,
+  because MapLibre's `ConnectivityReceiver` calls `ConnectivityManager` and
+  would otherwise throw. Verified against the 13.6.0 AAR: no `WifiManager`
+  use, and no telemetry/analytics classes at all.
+- `allowBackup=false`, cleartext traffic disabled, only the launcher activity
+  exported, R8 + resource shrinking on release with keep rules for JNA/UniFFI.
+- **Signing keys never enter the repo.** Credentials come from an untracked
+  `keystore.properties` or from env vars; absent them the release build is
+  left **unsigned** rather than silently using the public debug key.
+- Dependencies are pinned (no dynamic versions); CI validates the Gradle
+  wrapper and fails on any Play Services/Firebase artifact.
 
 ---
 
@@ -139,13 +162,28 @@ Track progress against this list when picking the project back up:
 
 - [x] Rust core: camera/FOV geometry, exposure scoring, camera-aware A* — unit-tested.
 - [x] UniFFI surface (`Router::from_pbf`, `plan`, `cameras_near`, `camera_count`).
-- [ ] `core/src/osm.rs::load_cameras` / `load_graph` — PBF ingest via `osmpbf`.
-- [ ] Spatial grid for `CameraIndex::any_covers` and `Graph::nearest_node`
-      (required at Berlin scale — the linear scans don't survive ~10⁶ edge
-      samples × 10³ cameras).
-- [ ] `core/examples/plan_route.rs` CLI demo on the real Berlin snapshot.
-- [ ] `scripts/build_map_assets.sh`: Geofabrik → filtered snapshot + Planetiler
-      offline tiles.
-- [ ] Android app: Gradle + cargo-ndk + UniFFI bindings + MapLibre map screen
+- [x] `core/src/osm.rs::load_cameras` / `load_graph` — PBF ingest via `osmpbf`.
+- [x] Spatial grids for `CameraIndex::any_covers` (3×3 cell query) and
+      `Graph::nearest_node` (expanding ring). Both tested against brute force.
+- [x] `core/examples/plan_route.rs` CLI demo; `core/tests/pbf_ingest.rs`
+      exercises the whole pipeline on a synthetic PBF fixture.
+- [x] `scripts/build_map_assets.sh`: Geofabrik (md5-verified) → filtered
+      snapshot + Planetiler offline tiles.
+- [x] Android app: Gradle + cargo-ndk + UniFFI bindings + MapLibre map screen
       (offline tiles, camera layer, tap-to-route, paranoia slider).
-- [ ] CI: Rust fmt/clippy/test + Android assembleDebug.
+- [x] CI: Rust fmt/clippy/test + Android assembleDebug + no-Play-Services gate.
+
+**Not yet verified anywhere:** the app has never been run on a device or
+emulator — no Android SDK was reachable from the environment that built it
+(Google's Maven host is blocked there), so the APK is produced by CI. The Rust
+core, by contrast, is fully tested locally. First device run should check:
+PMTiles actually renders from `file://`, the camera layer populates on pan,
+and load time for the real Berlin extract is tolerable.
+
+**Known perf follow-up:** exposure scoring is a one-off pass at load time over
+every edge; if the Berlin extract makes first launch slow, cache the scored
+graph rather than re-deriving it, and consider `rstar` in place of the grids.
+
+**Deliberately deferred:** cycling profile, location puck ("centre on me"),
+search/geocoding, camera FOV tuning against ground truth, Play Services
+fallback build.

@@ -76,11 +76,19 @@ SDK/NDK, JDK 17+, and (for the data pipeline) `osmium` + Java for Planetiler.
 - **No Google Play Services, no Firebase, no analytics.** Targets de-Googled
   devices (GrapheneOS) as a first-class case. minSdk 29 (Android 10).
 - **MapLibre** with bundled offline vector tiles — not the Google Maps SDK, and
-  no tile server sees your viewport.
+  no tile server sees your viewport. (The MapLibre AAR was audited: no
+  telemetry or analytics classes.)
+- Routing and scoring are **fully offline**; the app ships with a bundled Berlin
+  data snapshot and **declares no `INTERNET` permission** — MapLibre's own
+  `INTERNET`, `ACCESS_WIFI_STATE` and location permissions are stripped in the
+  manifest merge, so the app requests no dangerous permission at all.
 - Positioning (if/when used) via the platform **LocationManager (GNSS)**, never
   the Fused Location Provider.
-- Routing and scoring are **fully offline**; the app ships with a bundled Berlin
-  data snapshot and declares no `INTERNET` permission.
+- Signing keys never enter this repo; release builds are left unsigned rather
+  than falling back to the forgeable debug key.
+
+Full threat model, including what this app explicitly does **not** protect
+against: [SECURITY.md](SECURITY.md).
 
 ## Honesty
 

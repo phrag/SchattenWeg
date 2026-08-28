@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  core:
+    name: Rust core
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup toolchain install stable --component rustfmt,clippy --profile minimal
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --all-targets
+
+  android:
+    name: Android app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          sdkmanager --install "ndk;28.0.13004108"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.0.13004108" >> "$GITHUB_ENV"
+
+      - name: Install Rust with Android targets
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-linux-android x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      # No map assets in git (they are ~100 MB and regenerable); the app is
+      # built without them and falls back to an empty basemap. See
+      # scripts/build_map_assets.sh.
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Check for Google/Play Services dependencies
+        run: |
+          ./gradlew :app:dependencies --configuration debugRuntimeClasspath --no-daemon \
+            > deps.txt
+          if grep -Ei "com\.google\.android\.gms|play-services|firebase" deps.txt; then
+            echo "::error::Play Services / Firebase dependency found — see CLAUDE.md"
+            exit 1
+          fi
+          echo "No Play Services or Firebase in the dependency tree."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: schattenweg-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
