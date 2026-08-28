@@ -73,7 +73,7 @@ fetch() {
     # reach the terminal; we classify from the exit code and HTTP status.
     code=$(curl -fL --show-error \
         --retry "$RETRIES" --retry-delay 3 --retry-connrefused \
-        --connect-timeout 20 \
+        --connect-timeout 20 --speed-limit 1024 --speed-time 30 \
         -w '%{http_code}' \
         -C - -o "$part" "$url") || rc=$?
 
@@ -171,24 +171,48 @@ elif [[ -n "${EXTRACT_URL:-}" ]]; then
     echo "Custom EXTRACT_URL set; skipping the Geofabrik checksum."
     echo "   Verify your source yourself -- see SECURITY.md."
 else
-    echo "Verifying extract checksum..."
-    if ! curl -fsSL --retry "$RETRIES" --retry-delay 3 --connect-timeout 20 \
-        "$GEOFABRIK.md5" -o "$DATA/berlin-latest.osm.pbf.md5"; then
-        die "downloaded the extract but could not fetch its checksum from
+    md5file="$RAW.md5"
+
+    # Reuse a previously fetched checksum. The extract is only downloaded when
+    # absent, so a cached checksum still describes the file on disk -- and a
+    # re-run after an interrupted build should not depend on the network at
+    # all. Anything that is not a bare 32-hex-digit line is treated as a failed
+    # or partial download and refetched.
+    if [[ -f "$md5file" ]] \
+        && grep -qE '^[0-9a-fA-F]{32}([[:space:]]|$)' "$md5file"; then
+        echo "Verifying extract checksum (using cached $(basename "$md5file"))..."
+    else
+        echo "Fetching published checksum..."
+        # --max-time bounds the whole request: this file is ~50 bytes, so any
+        # transfer still running after a minute is a stalled connection, not a
+        # slow one. Without it curl waits indefinitely on a server that accepts
+        # the connection and then goes quiet, which looks exactly like a hang.
+        if ! curl -fsSL --retry "$RETRIES" --retry-delay 3 \
+            --connect-timeout 20 --max-time 60 \
+            "$GEOFABRIK.md5" -o "$md5file"; then
+            rm -f "$md5file"
+            die "downloaded the extract but could not fetch its checksum from
   $GEOFABRIK.md5
-Re-run in a few minutes (the extract is kept, so this is quick). To verify by
-hand:  md5sum $RAW   and compare against the .md5 published next to the file.
-To proceed without verification (understand the risk):  SKIP_CHECKSUM=1 $0"
+The extract itself is fine and is kept, so a re-run is quick. If that host
+stays unresponsive you have two honest options:
+  * verify by hand:  md5_hex is just md5sum/md5 -- compare
+      md5sum $RAW
+    against the checksum published beside the extract, then
+      SKIP_CHECKSUM=1 $0
+  * skip verification knowing what that means:  SKIP_CHECKSUM=1 $0"
+        fi
+        echo "Verifying extract checksum..."
     fi
+
     # The published file is "<md5>  berlin-latest.osm.pbf"; we only want the hex.
-    published="$(awk '{print $1}' "$DATA/berlin-latest.osm.pbf.md5")"
+    published="$(awk '{print $1}' "$md5file")"
     actual="$(md5_hex "$RAW")"
     if [[ -z "$published" || "$published" != "$actual" ]]; then
         die "checksum mismatch for $RAW
   published: ${published:-<none found>}
   actual:    $actual
-The download is corrupt or was tampered with. Delete it and re-run:
-  rm $RAW && $0"
+The download is corrupt or was tampered with. Delete both and re-run:
+  rm $RAW $md5file && $0"
     fi
     echo "  OK ($actual)"
 fi
