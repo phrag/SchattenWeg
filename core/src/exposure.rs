@@ -39,6 +39,11 @@ pub struct Edge {
 /// city scale given typical camera ranges of 20–30 m.
 const SAMPLE_STEP_M: f64 = 5.0;
 
+/// Hard ceiling on samples per edge, so untrusted input can't turn one
+/// pathological edge into an unbounded loop. 2000 samples covers a 10 km edge
+/// at full resolution — far longer than any real OSM street segment.
+const MAX_SAMPLES: usize = 2_000;
+
 /// Compute and attach an exposure score to every edge, given the node table
 /// and the camera set. Mutates `edges` in place.
 ///
@@ -65,10 +70,18 @@ fn edge_exposure(
     length_m: f64,
     cameras: &CameraIndex,
 ) -> f64 {
-    if length_m <= f64::EPSILON {
+    // NaN (from malformed coordinates) fails this test and is treated as
+    // zero-length, same as a degenerate edge.
+    if length_m.is_nan() || length_m <= f64::EPSILON {
         return 0.0;
     }
-    let steps = (length_m / SAMPLE_STEP_M).ceil().max(1.0) as usize;
+    // Sample count is bounded: a corrupt or hostile extract could otherwise
+    // present a single edge thousands of kilometres long and stall the load
+    // pass. Beyond the cap the sampling just gets coarser.
+    let steps = (length_m / SAMPLE_STEP_M)
+        .ceil()
+        .max(1.0)
+        .min(MAX_SAMPLES as f64) as usize;
     let mut covered = 0usize;
     for i in 0..=steps {
         let t = i as f64 / steps as f64;
@@ -195,6 +208,15 @@ mod tests {
         let idx = CameraIndex::new(vec![dome_at(52.60, 13.50, 20.0)]);
         let e = edge_exposure(52.52, 13.40, 52.52, 13.41, 700.0, &idx);
         assert_eq!(e, 0.0);
+    }
+
+    #[test]
+    fn absurd_edge_length_is_bounded_not_hung() {
+        // A corrupt extract could claim a single edge spans the planet. The
+        // sample count must stay capped instead of looping for minutes.
+        let idx = CameraIndex::new(vec![dome_at(52.52, 13.40, 25.0)]);
+        let e = edge_exposure(52.52, 13.40, -33.9, 151.2, 16_000_000.0, &idx);
+        assert!((0.0..=1.0).contains(&e));
     }
 
     #[test]

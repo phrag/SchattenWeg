@@ -13,6 +13,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -60,7 +61,8 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val start by viewModel.start.collectAsState()
     val end by viewModel.end.collectAsState()
 
-    val assets = remember { MapAssets.ensure(context) }
+    val basemap by viewModel.basemap.collectAsState()
+    val basemapReady by viewModel.basemapReady.collectAsState()
     val mapView = remember {
         MapLibre.getInstance(context)
         MapView(context)
@@ -90,6 +92,53 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
     Box(Modifier.fillMaxSize()) {
 
+        // The style can only be built once provisioning has told us whether
+        // offline tiles exist, so it is applied here rather than in factory().
+        LaunchedEffect(basemapReady, basemap) {
+            if (!basemapReady) return@LaunchedEffect
+            val styleJson = MapAssets.styleJson(context, basemap)
+            mapView.getMapAsync { map ->
+                map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
+                    style.addSource(GeoJsonSource(ROUTE_SOURCE, EMPTY_COLLECTION))
+                    style.addSource(GeoJsonSource(CAMERA_SOURCE, EMPTY_COLLECTION))
+                    style.addSource(GeoJsonSource(ENDPOINT_SOURCE, EMPTY_COLLECTION))
+
+                    style.addLayer(
+                        LineLayer("sw-route-line", ROUTE_SOURCE).withProperties(
+                            PropertyFactory.lineColor("#7fd4a2"),
+                            PropertyFactory.lineWidth(5f),
+                            PropertyFactory.lineCap("round"),
+                            PropertyFactory.lineJoin("round"),
+                        ),
+                    )
+                    style.addLayer(
+                        CircleLayer("sw-camera-dots", CAMERA_SOURCE).withProperties(
+                            PropertyFactory.circleRadius(5f),
+                            PropertyFactory.circleColor("#e0575b"),
+                            PropertyFactory.circleOpacity(0.85f),
+                            PropertyFactory.circleStrokeWidth(1f),
+                            PropertyFactory.circleStrokeColor("#2a0f11"),
+                        ),
+                    )
+                    style.addLayer(
+                        CircleLayer("sw-endpoint-dots", ENDPOINT_SOURCE).withProperties(
+                            PropertyFactory.circleRadius(7f),
+                            PropertyFactory.circleColor("#f2f4f8"),
+                            PropertyFactory.circleStrokeWidth(2f),
+                            PropertyFactory.circleStrokeColor("#10141a"),
+                        ),
+                    )
+
+                    map.cameraPosition.target?.let { centre ->
+                        viewModel.refreshCameras(
+                            LatLon(centre.latitude, centre.longitude),
+                            CAMERA_QUERY_RADIUS_M,
+                        )
+                    }
+                }
+            }
+        }
+
         AndroidView(
             factory = {
                 mapView.getMapAsync { map ->
@@ -97,48 +146,6 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         .target(BERLIN)
                         .zoom(14.0)
                         .build()
-
-                    map.setStyle(
-                        Style.Builder().fromJson(MapAssets.styleJson(context, assets.pmtiles)),
-                    ) { style ->
-                        style.addSource(GeoJsonSource(ROUTE_SOURCE, EMPTY_COLLECTION))
-                        style.addSource(GeoJsonSource(CAMERA_SOURCE, EMPTY_COLLECTION))
-                        style.addSource(GeoJsonSource(ENDPOINT_SOURCE, EMPTY_COLLECTION))
-
-                        style.addLayer(
-                            LineLayer("sw-route-line", ROUTE_SOURCE).withProperties(
-                                PropertyFactory.lineColor("#7fd4a2"),
-                                PropertyFactory.lineWidth(5f),
-                                PropertyFactory.lineCap("round"),
-                                PropertyFactory.lineJoin("round"),
-                            ),
-                        )
-                        style.addLayer(
-                            CircleLayer("sw-camera-dots", CAMERA_SOURCE).withProperties(
-                                PropertyFactory.circleRadius(5f),
-                                PropertyFactory.circleColor("#e0575b"),
-                                PropertyFactory.circleOpacity(0.85f),
-                                PropertyFactory.circleStrokeWidth(1f),
-                                PropertyFactory.circleStrokeColor("#2a0f11"),
-                            ),
-                        )
-                        style.addLayer(
-                            CircleLayer("sw-endpoint-dots", ENDPOINT_SOURCE).withProperties(
-                                PropertyFactory.circleRadius(7f),
-                                PropertyFactory.circleColor("#f2f4f8"),
-                                PropertyFactory.circleStrokeWidth(2f),
-                                PropertyFactory.circleStrokeColor("#10141a"),
-                            ),
-                        )
-
-                        val centre = map.cameraPosition.target
-                        if (centre != null) {
-                            viewModel.refreshCameras(
-                                LatLon(centre.latitude, centre.longitude),
-                                CAMERA_QUERY_RADIUS_M,
-                            )
-                        }
-                    }
 
                     map.addOnMapClickListener { point ->
                         viewModel.onMapTap(LatLon(point.latitude, point.longitude))

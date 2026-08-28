@@ -32,6 +32,8 @@ val hasReleaseSigning = listOf(
 android {
     namespace = "de.schattenweg.app"
     compileSdk = 36
+    // Keep in step with the NDK install step in .github/workflows/ci.yml.
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "de.schattenweg.app"
@@ -75,6 +77,13 @@ android {
         debug {
             applicationIdSuffix = ".debug"
         }
+    }
+
+    androidResources {
+        // Map data must be stored uncompressed: PMTiles needs byte-range
+        // reads, and AssetManager.openFd() refuses compressed entries. These
+        // formats are already compressed internally, so nothing is lost.
+        noCompress += listOf("pbf", "pmtiles")
     }
 
     compileOptions {

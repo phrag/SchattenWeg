@@ -56,10 +56,11 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      # Keep in step with ndkVersion in app/build.gradle.kts.
       - name: Install NDK
         run: |
-          sdkmanager --install "ndk;28.0.13004108"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.0.13004108" >> "$GITHUB_ENV"
+          sdkmanager --install "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
       - name: Install Rust with Android targets
         run: |

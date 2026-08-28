@@ -1,7 +1,9 @@
 package de.schattenweg.app
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,12 +23,22 @@ import uniffi.schattenweg_core.Router
  * immutable after construction, so a single instance is shared for the app's
  * lifetime.
  */
-class RouteViewModel : ViewModel() {
+class RouteViewModel(application: Application) : AndroidViewModel(application) {
 
     private var router: Router? = null
+    private var provisioning = false
 
     private val _state = MutableStateFlow<UiState>(UiState.Loading)
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    /**
+     * Path to the offline basemap once provisioned, or null while still
+     * copying / when no tiles are bundled. The map style is built from this.
+     */
+    val basemap = MutableStateFlow<File?>(null)
+
+    /** True once [provision] has finished, whatever the outcome. */
+    val basemapReady = MutableStateFlow(false)
 
     /** Paranoia dial, bound to a slider in the UI. 0 = shortest, higher = shyer. */
     val lambda = MutableStateFlow(2.0)
@@ -42,20 +54,35 @@ class RouteViewModel : ViewModel() {
     val route = MutableStateFlow<Route?>(null)
 
     /**
-     * Build the core from a Berlin `.osm.pbf` already on disk (bundled asset
-     * copied into app storage). Heavy — do it once, off-thread.
+     * Copy the bundled map data out of the APK and build the Rust core from
+     * it. Both steps are heavy — the snapshot is tens of megabytes and the
+     * exposure pass walks every edge — so all of it runs off the main thread.
+     * Safe to call repeatedly; the copy is skipped once the files are in place.
      */
-    fun initialise(pbfPath: String?) {
-        if (pbfPath == null) {
-            _state.value = UiState.Error(
-                "No Berlin map data bundled. Run scripts/build_map_assets.sh and rebuild.",
-            )
-            return
-        }
+    fun provision() {
+        // Guard against a second pass: onCreate runs again on configuration
+        // change while this ViewModel (and any in-flight load) survives.
+        if (router != null || provisioning) return
+        provisioning = true
         viewModelScope.launch {
             _state.value = UiState.Loading
+
+            val assets = withContext(Dispatchers.IO) {
+                MapAssets.ensure(getApplication())
+            }
+            basemap.value = assets.pmtiles
+            basemapReady.value = true
+
+            val pbf = assets.routingPbf
+            if (pbf == null) {
+                _state.value = UiState.Error(
+                    "No Berlin map data bundled. Run scripts/build_map_assets.sh and rebuild.",
+                )
+                return@launch
+            }
+
             _state.value = try {
-                val r = withContext(Dispatchers.Default) { Router.fromPbf(pbfPath) }
+                val r = withContext(Dispatchers.Default) { Router.fromPbf(pbf.absolutePath) }
                 router = r
                 UiState.Ready(cameraCount = r.cameraCount())
             } catch (e: RouteException) {

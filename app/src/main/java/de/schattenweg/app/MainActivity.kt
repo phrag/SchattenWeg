@@ -14,9 +14,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val viewModel = ViewModelProvider(this)[RouteViewModel::class.java]
-        // Provision the bundled Berlin snapshot into app-private storage and
-        // hand the Rust core its path. Idempotent; cheap after first launch.
-        viewModel.initialise(MapAssets.ensure(this).routingPbf?.absolutePath)
+        // Unpacks the bundled Berlin data and builds the Rust core, entirely
+        // off the main thread. Idempotent; cheap after the first launch.
+        viewModel.provision()
 
         setContent {
             MaterialTheme(colorScheme = SchattenwegColors) {

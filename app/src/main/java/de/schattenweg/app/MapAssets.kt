@@ -44,10 +44,25 @@ object MapAssets {
     ): File? {
         if (name !in bundled) return null
         val out = File(outDir, name)
-        val assetSize = context.assets.openFd("$ASSET_DIR/$name").use { it.length }
-        if (out.length() != assetSize) {
+
+        // Size of the packaged asset, used to detect a partial or stale copy.
+        // openFd only works for uncompressed entries (see the noCompress block
+        // in build.gradle.kts); if it ever fails, re-copy rather than trust a
+        // file we can't verify.
+        val assetSize = runCatching {
+            context.assets.openFd("$ASSET_DIR/$name").use { it.length }
+        }.getOrNull()
+
+        if (assetSize == null || out.length() != assetSize) {
+            // Copy to a temporary file first: an interrupted copy must not
+            // leave a truncated file that looks complete on the next launch.
+            val tmp = File(outDir, "$name.part")
             context.assets.open("$ASSET_DIR/$name").use { input ->
-                out.outputStream().use { input.copyTo(it) }
+                tmp.outputStream().use { input.copyTo(it) }
+            }
+            if (!tmp.renameTo(out)) {
+                tmp.delete()
+                return null
             }
         }
         return out
