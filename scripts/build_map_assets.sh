@@ -112,18 +112,36 @@ What you can do:
 }
 
 # --- 0. Preflight ------------------------------------------------------------
-# Check tools before spending bandwidth on a 70 MB download.
+# Check every tool up front: discovering a missing one after a 94 MB download
+# (or twenty minutes into tiling) wastes real time.
 missing=()
 for tool in curl osmium md5sum; do
     command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 done
+
+JAVA_MIN=21
 if [[ "${SKIP_TILES:-0}" != "1" ]]; then
-    command -v java >/dev/null 2>&1 || missing+=("java (21+, for Planetiler)")
+    if ! command -v java >/dev/null 2>&1; then
+        missing+=("java (${JAVA_MIN}+, for Planetiler)")
+    else
+        # "21.0.10" -> 21; legacy "1.8.0_302" -> 1, correctly below the bar.
+        java_major="$(java -version 2>&1 | awk -F'"' '/version/ {print $2}' \
+            | cut -d. -f1)"
+        if [[ "$java_major" =~ ^[0-9]+$ ]] && (( java_major < JAVA_MIN )); then
+            die "Planetiler needs Java $JAVA_MIN+, but 'java' here is $java_major.
+  macOS:          brew install openjdk@$JAVA_MIN
+  Debian/Ubuntu:  sudo apt-get install openjdk-${JAVA_MIN}-jre
+Then re-run — the extract is already downloaded, so this is quick.
+Or skip the basemap for now:  SKIP_TILES=1 $0"
+        fi
+    fi
 fi
+
 if (( ${#missing[@]} )); then
     die "missing required tool(s): ${missing[*]}
-On Debian/Ubuntu:  sudo apt-get install osmium-tool curl coreutils default-jre
-On macOS:          brew install osmium-tool curl openjdk"
+  macOS:          brew install osmium-tool curl coreutils openjdk@$JAVA_MIN
+  Debian/Ubuntu:  sudo apt-get install osmium-tool curl coreutils default-jre
+Nothing has been downloaded yet, so install these and re-run."
 fi
 
 # --- 1. Geofabrik extract ----------------------------------------------------
