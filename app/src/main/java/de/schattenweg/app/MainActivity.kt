@@ -5,8 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.ViewModelProvider
 
 class MainActivity : ComponentActivity() {
 

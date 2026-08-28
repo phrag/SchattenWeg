@@ -106,6 +106,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.lifecycle.runtime.compose)
     implementation(libs.maplibre)
     // UniFFI-generated bindings load the Rust core through JNA (Android aar).
     implementation(libs.jna) {

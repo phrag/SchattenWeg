@@ -68,7 +68,7 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
             _state.value = UiState.Loading
 
             val assets = withContext(Dispatchers.IO) {
-                MapAssets.ensure(getApplication())
+                MapAssets.ensure(getApplication<Application>())
             }
             basemap.value = assets.pmtiles
             basemapReady.value = true
@@ -85,7 +85,11 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
                 val r = withContext(Dispatchers.Default) { Router.fromPbf(pbf.absolutePath) }
                 router = r
                 UiState.Ready(cameraCount = r.cameraCount())
-            } catch (e: RouteException) {
+            } catch (e: Exception) {
+                // Deliberately broad: this is the one place that feeds a whole
+                // file into the core. Besides RouteException, a malformed
+                // extract can surface as UniFFI's InternalException (a Rust
+                // panic), and telling the user beats killing the process.
                 UiState.Error(e.message ?: "Could not load the map data")
             }
         }
