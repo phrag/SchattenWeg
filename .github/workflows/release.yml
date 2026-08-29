@@ -1,0 +1,130 @@
+name: Release
+
+# Build the APK and publish it to GitHub Releases so each build is downloadable
+# from the project's Releases page (linked from inside the app — see
+# MapScreen.kt's ProjectLink). Pushing a version tag (v0.1.0, …) cuts a normal
+# release; a manual run cuts a throwaway pre-release tagged build-<run>.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Creating a release and uploading assets needs write access to the repo's
+# contents; the default token is otherwise read-only (see ci.yml).
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Build & publish APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Two JDKs: the Android build wants 17 (jvmToolchain(17)), Planetiler
+      # wants 21+. 17 is listed last so it wins JAVA_HOME (Gradle uses it);
+      # the asset step below reaches for $JAVA_HOME_21_X64 explicitly.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            17
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      # Keep in step with ndkVersion in app/build.gradle.kts.
+      - name: Install NDK
+        run: |
+          sdkmanager --install "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Install Rust with Android targets
+        # rust-toolchain.toml pins the version and both Android targets.
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      # osmium filters the extract to streets + surveillance nodes; unzip pulls
+      # the Latin glyph ranges out of the font pack. Both are used by
+      # scripts/build_map_assets.sh.
+      - name: Install osmium & unzip
+        run: sudo apt-get update && sudo apt-get install -y osmium-tool unzip
+
+      # Generate the offline Berlin data the app bundles: routing snapshot,
+      # label glyphs and vector basemap tiles, all copied into
+      # app/src/main/assets/map/. This is the ONE network step (Geofabrik +
+      # Planetiler sources), it runs here on the builder, never on the phone.
+      # Planetiler needs Java 21, so this step overrides the Gradle-facing 17.
+      - name: Build offline map assets
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          java -version
+          ./scripts/build_map_assets.sh
+
+      # A debug-type APK, but now with the Berlin data bundled, so it is a
+      # working offline build (not the blank-basemap fallback CI produces). It
+      # is debug-signed and carries the .debug application-id suffix — the
+      # release notes say so; a release-key-signed build still needs the
+      # keystore, which never enters the repo.
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Check for Google/Play Services dependencies
+        run: |
+          ./gradlew :app:dependencies --configuration debugRuntimeClasspath --no-daemon \
+            > deps.txt
+          if grep -Ei "com\.google\.android\.gms|play-services|firebase" deps.txt; then
+            echo "::error::Play Services / Firebase dependency found — see CLAUDE.md"
+            exit 1
+          fi
+          echo "No Play Services or Firebase in the dependency tree."
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "name=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=build-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.name }}
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+        run: |
+          apk=$(ls app/build/outputs/apk/debug/*.apk | head -n1)
+          echo "Publishing $apk to release $TAG"
+          notes=$(cat <<'EOF'
+          Debug build of Schattenweg with the offline Berlin map data bundled
+          (routing snapshot + vector basemap + labels), so it maps and routes
+          out of the box. It is debug-signed and carries the `.debug`
+          application-id suffix (installable alongside a release build, and
+          marked debuggable). It is **not** signed with a release key — that
+          needs the keystore, which never enters the repo — so build from
+          source for a release-signed APK.
+          EOF
+          )
+          flags=(--title "$TAG" --notes "$notes")
+          [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          # If the release/tag already exists, just replace its APK asset.
+          gh release create "$TAG" "$apk" "${flags[@]}" \
+            || gh release upload "$TAG" "$apk" --clobber
