@@ -1,4 +1,15 @@
+# Pinned deliberately. The lockfile resolves dependency versions that carry
+# their own minimum-rustc requirements (uniffi -> cargo_metadata ->
+# cargo-platform currently needs 1.91), so a floating "stable" channel means
+# the build works or fails depending on which stable each machine happens to
+# have installed. Pinning makes the toolchain part of the build definition,
+# and rustup installs it -- and the Android targets below -- automatically on
+# the first cargo command in this repo.
+#
+# 1.94.1 is the version this project is developed and tested against. To move
+# it, bump here, run the test suite, and commit the result together with any
+# Cargo.lock change.
 [toolchain]
-channel = "stable"
-# Android targets are added on demand:
-#   rustup target add aarch64-linux-android x86_64-linux-android
+channel = "1.94.1"
+components = ["rustfmt", "clippy"]
+targets = ["aarch64-linux-android", "x86_64-linux-android"]

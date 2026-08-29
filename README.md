@@ -47,8 +47,15 @@ routes with longer detours.
 
 ## Build
 
-**Prerequisites:** Rust (stable) with Android targets, `cargo-ndk`, the Android
-SDK/NDK, JDK 17+, and (for the data pipeline) `osmium` + Java for Planetiler.
+**Prerequisites:** `rustup`, `cargo-ndk` (`cargo install cargo-ndk`), the
+Android SDK/NDK, JDK 17+, and — for the data pipeline — `osmium` plus Java 21+
+for Planetiler.
+
+The Rust toolchain version and both Android targets are pinned in
+`rust-toolchain.toml`, so rustup installs them for you on the first build; you
+do not need `rustup target add`. A floating toolchain is what this pin
+prevents: the lockfile's dependencies impose their own minimum rustc, so
+"whatever stable you have" is not a build specification.
 
 1. **Build map data + tiles**
    ```bash
