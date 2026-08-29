@@ -182,16 +182,31 @@ Track progress against this list when picking the project back up:
       (offline tiles, camera layer, tap-to-route, paranoia slider).
 - [x] CI: Rust fmt/clippy/test + Android assembleDebug + no-Play-Services gate.
 
-**Not yet verified anywhere:** the app has never been run on a device or
-emulator — no Android SDK was reachable from the environment that built it
-(Google's Maven host is blocked there), so the APK is produced by CI. The Rust
-core, by contrast, is fully tested locally. First device run should check:
-PMTiles actually renders from `file://`, the camera layer populates on pan,
-and load time for the real Berlin extract is tolerable.
+**Verified end to end on an emulator** (2026-08-29, arm64, OpenGL backend):
+the bundled 81 MB PMTiles basemap renders offline from `filesDir`, ingest
+reports 4251 Berlin cameras with 641 drawn within a 2 km radius, tap-to-route
+plans between two taps, and moving λ re-plans. A λ=8 route across the centre
+came out 3093 m at 0% mean exposure. **Not yet run on real hardware** — the
+emulator has no usable Vulkan driver, so that path is still unexercised (see
+§3); a Pixel is the next real test.
 
-**Known perf follow-up:** exposure scoring is a one-off pass at load time over
-every edge; if the Berlin extract makes first launch slow, cache the scored
-graph rather than re-deriving it, and consider `rstar` in place of the grids.
+Three bugs that only appear on-device were found in that first run, all worth
+remembering because none could fail a unit test:
+- MapLibre 13.x defaults to Vulkan; on the emulator it rendered *nothing*, not
+  even GeoJSON overlays, while logging no error.
+- `refreshCameras` returned early while the router was still loading, so the
+  camera layer stayed empty until something moved the map.
+- The GeoJSON overlays were written from `AndroidView`'s `update` block with
+  the state reads inside `getMapAsync`'s callback. Compose does not record
+  reads made in an async callback, so the block ran once against empty data
+  and never again. Overlay data is now pushed from a keyed `LaunchedEffect`;
+  keep it that way.
+
+**Known perf follow-up:** the router is ready ~6 s after launch on the real
+Berlin extract (style loads in ~80 ms by comparison) — that gap is the one-off
+exposure pass over every edge, and it is paid on every cold start. Caching the
+scored graph rather than re-deriving it is the fix; `rstar` in place of the
+grids is the smaller lever.
 
 **Deliberately deferred:** cycling profile, location puck ("centre on me"),
 search/geocoding, camera FOV tuning against ground truth, Play Services
