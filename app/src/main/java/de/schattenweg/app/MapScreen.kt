@@ -493,7 +493,9 @@ private const val TAG = "Schattenweg"
 private fun MapLibreMap.viewportRadiusM(): Double {
     val centre = cameraPosition.target ?: return 2_000.0
     val bounds = projection.visibleRegion.latLngBounds
-    val corner = LatLng(bounds.latNorth, bounds.lonEast)
+    // LatLngBounds is Kotlin, so these are public fields; getLatNorth()/
+    // getLonEast() are plain functions, not synthesised properties.
+    val corner = LatLng(bounds.latitudeNorth, bounds.longitudeEast)
     return centre.distanceTo(corner).coerceIn(500.0, 40_000.0)
 }
 
