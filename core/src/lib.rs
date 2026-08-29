@@ -26,8 +26,12 @@ uniffi::setup_scaffolding!();
 /// Errors surfaced to the app layer.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum RouteError {
-    #[error("failed to load map data: {message}")]
-    LoadFailed { message: String },
+    // Deliberately NOT named `message`: UniFFI maps an error field onto a
+    // Kotlin class that already inherits `message` from Throwable, and emits
+    // both `val message` and `override val message` in the same class, which
+    // does not compile. Any field name but `message` avoids the collision.
+    #[error("failed to load map data: {reason}")]
+    LoadFailed { reason: String },
     #[error("no graph node near the given start/end point")]
     NoNearbyNode,
     #[error("no route exists between the given points")]
@@ -71,7 +75,7 @@ impl Router {
     #[uniffi::constructor]
     pub fn from_pbf(pbf_path: String) -> Result<Arc<Self>, RouteError> {
         let load = |e: osm::OsmError| RouteError::LoadFailed {
-            message: e.to_string(),
+            reason: e.to_string(),
         };
         let cameras = CameraIndex::new(osm::load_cameras(&pbf_path).map_err(load)?);
         let (nodes, mut edges) = osm::load_graph(&pbf_path).map_err(load)?;

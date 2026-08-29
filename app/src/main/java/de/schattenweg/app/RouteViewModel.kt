@@ -90,9 +90,30 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
                 // file into the core. Besides RouteException, a malformed
                 // extract can surface as UniFFI's InternalException (a Rust
                 // panic), and telling the user beats killing the process.
-                UiState.Error(e.message ?: "Could not load the map data")
+                UiState.Error(
+                    (e as? RouteException)?.explain()
+                        ?: e.message?.takeIf { it.isNotBlank() }
+                        ?: "Could not load the map data",
+                )
             }
         }
+    }
+
+    /**
+     * Wording a user can act on.
+     *
+     * UniFFI gives a fieldless error variant `message == ""` rather than null,
+     * so an `?: fallback` never fires and the UI would show an empty error.
+     * Matching on the variant also lets each case say what to do next, which
+     * the Rust-side text does not.
+     */
+    private fun RouteException.explain(): String = when (this) {
+        is RouteException.NoNearbyNode ->
+            "No mapped street near there. Tap closer to a road."
+        is RouteException.Unreachable ->
+            "No walking route between those two points."
+        is RouteException.LoadFailed ->
+            "Could not load the map data: $reason"
     }
 
     /** Handle a map tap: first sets the start, second the destination. */
@@ -123,7 +144,7 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
                 UiState.Routed(planned)
             } catch (ex: RouteException) {
                 route.value = null
-                UiState.Error(ex.message ?: "Could not plan a route")
+                UiState.Error(ex.explain())
             }
         }
     }

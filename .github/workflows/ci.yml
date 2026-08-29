@@ -114,7 +114,8 @@ jobs:
           # Home directories and machine-local paths. The example keystore
           # deliberately shows a placeholder absolute path, so it is exempt.
           if git grep -nIE '/Users/[a-z0-9]|/home/[a-z0-9]|C:\\Users\\[A-Za-z0-9]|/opt/homebrew' \
-               -- . ':!keystore.properties.example' ':!.github/workflows/ci.yml'; then
+               -- . ':!keystore.properties.example' \
+                    ':!.github/workflows/ci.yml' ':!.githooks/pre-commit'; then
             echo "::error::machine-local path in a tracked file"
             fail=1
           fi
@@ -122,7 +123,7 @@ jobs:
           # Real email addresses. Anthropic's noreply and Android resource
           # references (@string/, @drawable/, ...) are not addresses.
           if git grep -nIE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . \
-               ':!.github/workflows/ci.yml' \
+               ':!.github/workflows/ci.yml' ':!.githooks/pre-commit' \
                | grep -vE 'noreply@anthropic\.com|example\.com|@aar|@types'; then
             echo "::error::email address in a tracked file"
             fail=1
@@ -130,7 +131,7 @@ jobs:
 
           # Credential material. Signing keys live outside the repo entirely.
           if git grep -nIE 'BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}' \
-               -- . ':!.github/workflows/ci.yml'; then
+               -- . ':!.github/workflows/ci.yml' ':!.githooks/pre-commit'; then
             echo "::error::secret-shaped string in a tracked file"
             fail=1
           fi
