@@ -440,12 +440,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
             ) {
                 Column(
-                    Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
                         "Camera avoidance",
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFFF2F4F8),
                     )
                     AvoidanceSelector(
@@ -459,23 +459,30 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         },
                     )
                     Text(
-                        "Shows only cameras mapped in OpenStreetMap — real coverage " +
-                            "is higher. Avoiding them is not anonymity.",
-                        style = MaterialTheme.typography.bodySmall,
+                        "Only cameras mapped in OpenStreetMap — real coverage is " +
+                            "higher. Avoiding them is not anonymity.",
+                        style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF9AA4B2),
                     )
-                    // Attribution is a licence obligation, not decoration: the OSM
-                    // data is ODbL and the OpenMapTiles schema the basemap is built
-                    // with is CC-BY, which requires a visible credit. Bundling the
-                    // tiles offline does not exempt us -- keep this on screen.
-                    Text(
-                        "© OpenMapTiles © OpenStreetMap contributors",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF6E7A8A),
-                    )
-                    // Source + releases. Launching a browser is an intent to
-                    // another app, so it needs no INTERNET permission of ours.
-                    ProjectLink()
+                    // One credit line: the map attribution (a licence obligation —
+                    // OSM is ODbL, the OpenMapTiles schema CC-BY, both need a
+                    // visible credit even offline) on the left, and the project
+                    // credit, which taps through to the releases page, on the
+                    // right. ProjectLink launches a browser via an intent, so it
+                    // needs no INTERNET permission of ours.
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "© OpenMapTiles © OpenStreetMap contributors",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF6E7A8A),
+                            modifier = Modifier.weight(1f),
+                        )
+                        ProjectLink()
+                    }
                 }
             }
         }
@@ -660,24 +667,13 @@ private fun AvoidanceSelector(
  * A tappable credit that opens the project's GitHub releases in a browser.
  * The app declares no INTERNET permission, but an ACTION_VIEW intent hands the
  * URL to the browser — a different app with its own network access — so this
- * leaks nothing and needs no permission of ours. Shows the installed version
- * so a bug report can name it.
+ * leaks nothing and needs no permission of ours.
  */
 @Composable
 private fun ProjectLink() {
     val context = LocalContext.current
-    val version = remember {
-        runCatching {
-            @Suppress("DEPRECATION")
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull()
-    }
     Text(
-        text = if (version != null) {
-            "Schattenweg v$version · source & releases on GitHub"
-        } else {
-            "Schattenweg · source & releases on GitHub"
-        },
+        "Schattenweg made by phrag",
         style = MaterialTheme.typography.labelSmall,
         color = Color(0xFF7FD4A2),
         modifier = Modifier.clickable {
