@@ -161,6 +161,36 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             }
         }
 
+        // Overlay data is pushed from here rather than from AndroidView's
+        // update block. The writes happen inside getMapAsync's callback, and
+        // snapshot reads made inside an async callback are not recorded as
+        // recomposition dependencies -- so update() would run once with empty
+        // data and never again. Naming the values as keys makes the dependency
+        // explicit and survives the callback.
+        LaunchedEffect(cameras, route, start, end) {
+            mapView.getMapAsync { map ->
+                val style = map.style
+                if (style == null) {
+                    Log.w(TAG, "Overlay update skipped: style not ready yet.")
+                    return@getMapAsync
+                }
+                val cameraSource = style.getSourceAs<GeoJsonSource>(CAMERA_SOURCE)
+                val routeSource = style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE)
+                val endpointSource = style.getSourceAs<GeoJsonSource>(ENDPOINT_SOURCE)
+                Log.d(
+                    TAG,
+                    "Overlays: cameras=${cameras.size} " +
+                        "route=${route?.polyline?.size ?: 0} " +
+                        "endpoints=${listOfNotNull(start, end).size} " +
+                        "sources=[${cameraSource != null},${routeSource != null}," +
+                        "${endpointSource != null}]",
+                )
+                cameraSource?.setGeoJson(camerasGeoJson(cameras))
+                routeSource?.setGeoJson(routeGeoJson(route?.polyline))
+                endpointSource?.setGeoJson(pointsGeoJson(listOfNotNull(start, end)))
+            }
+        }
+
         AndroidView(
             factory = {
                 // Without these, a renderer or tile failure is invisible: the
@@ -182,6 +212,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         .build()
 
                     map.addOnMapClickListener { point ->
+                        Log.d(TAG, "Map tapped at ${point.latitude},${point.longitude}")
                         viewModel.onMapTap(LatLon(point.latitude, point.longitude))
                         true
                     }
@@ -197,17 +228,6 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 mapView
             },
             modifier = Modifier.fillMaxSize(),
-            update = {
-                mapView.getMapAsync { map ->
-                    val style = map.style ?: return@getMapAsync
-                    style.getSourceAs<GeoJsonSource>(CAMERA_SOURCE)
-                        ?.setGeoJson(camerasGeoJson(cameras))
-                    style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE)
-                        ?.setGeoJson(routeGeoJson(route?.polyline))
-                    style.getSourceAs<GeoJsonSource>(ENDPOINT_SOURCE)
-                        ?.setGeoJson(pointsGeoJson(listOfNotNull(start, end)))
-                }
-            },
         )
 
         StatusCard(
