@@ -1,6 +1,7 @@
 package de.schattenweg.app
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import java.io.File
@@ -26,6 +27,9 @@ import uniffi.schattenweg_core.Router
 class RouteViewModel(application: Application) : AndroidViewModel(application) {
 
     private var router: Router? = null
+
+    /** Last region the map asked about, replayed when the router is ready. */
+    private var lastCameraQuery: Pair<LatLon, Double>? = null
     private var provisioning = false
 
     private val _state = MutableStateFlow<UiState>(UiState.Loading)
@@ -84,6 +88,11 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
             _state.value = try {
                 val r = withContext(Dispatchers.Default) { Router.fromPbf(pbf.absolutePath) }
                 router = r
+                // The map almost certainly asked for cameras while this was
+                // still loading; answer that request now.
+                lastCameraQuery?.let { (centre, radiusM) ->
+                    refreshCameras(centre, radiusM)
+                }
                 UiState.Ready(cameraCount = r.cameraCount())
             } catch (e: Exception) {
                 // Deliberately broad: this is the one place that feeds a whole
@@ -149,11 +158,23 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Refresh the camera layer for the visible region. */
+    /**
+     * Refresh the camera layer for the visible region.
+     *
+     * The map is ready long before the router is: loading the Berlin extract
+     * and scoring exposure takes seconds, while the style loads in
+     * milliseconds. A request that arrives in that window is remembered and
+     * replayed once the router exists -- otherwise the layer stays empty
+     * until something moves the map, which on a fresh launch is never.
+     */
     fun refreshCameras(centre: LatLon, radiusM: Double) {
+        lastCameraQuery = centre to radiusM
         val r = router ?: return
         viewModelScope.launch {
-            cameras.value = withContext(Dispatchers.Default) { r.camerasNear(centre, radiusM) }
+            val found = withContext(Dispatchers.Default) { r.camerasNear(centre, radiusM) }
+            Log.d(TAG, "cameras within ${radiusM.toInt()} m of " +
+                "${centre.lat},${centre.lon}: ${found.size}")
+            cameras.value = found
         }
     }
 
@@ -172,3 +193,5 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
         data class Error(val message: String) : UiState
     }
 }
+
+private const val TAG = "Schattenweg"

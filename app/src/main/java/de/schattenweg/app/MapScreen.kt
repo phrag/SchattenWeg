@@ -146,12 +146,17 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         ),
                     )
 
-                    map.cameraPosition.target?.let { centre ->
-                        viewModel.refreshCameras(
-                            LatLon(centre.latitude, centre.longitude),
-                            CAMERA_QUERY_RADIUS_M,
-                        )
-                    }
+                    // The style can finish before factory() has applied the
+                    // camera, leaving the target null or at null island. Berlin
+                    // is where this map always opens, so ask about it directly
+                    // rather than querying the middle of the Atlantic.
+                    val centre = map.cameraPosition.target
+                        ?.takeIf { it.latitude != 0.0 || it.longitude != 0.0 }
+                        ?: BERLIN
+                    viewModel.refreshCameras(
+                        LatLon(centre.latitude, centre.longitude),
+                        CAMERA_QUERY_RADIUS_M,
+                    )
                 }
             }
         }
