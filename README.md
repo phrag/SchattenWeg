@@ -1,7 +1,7 @@
 # Schattenweg
 
 A privacy-first Android app that maps Berlin's CCTV cameras and plans walking
-routes that **avoid** them. Rust core, Kotlin/Compose UI, no Google.
+routes that **avoid** them. Rust core, Kotlin/Compose UI, no Google, no network, no permissions, fully offline.
 
 > *Schattenweg* — the shadow path.
 
@@ -10,7 +10,8 @@ routes that **avoid** them. Rust core, Kotlin/Compose UI, no Google.
 - Plots `man_made=surveillance` cameras (from OpenStreetMap) on an offline map,
   drawing each camera's modelled field of view; tap one for its details.
 - Plans a route from A to B that trades detour length against camera exposure,
-  controlled by a single "paranoia" slider (λ).
+  set with a three-way **Low / Medium / High** avoidance control. When a
+  camera-free route exists, a freshly dropped A→B pair defaults to it.
 - Search streets and places, toggle map layers, and zoom — all offline.
 - Runs entirely on-device: no server sees your location or your routes. The
   place search reads a bundled index, so even typing a destination leaks
@@ -30,7 +31,7 @@ SchattenWeg/
 ├── app/                      # Android: Kotlin + Jetpack Compose + MapLibre
 │   └── src/main/java/de/schattenweg/app/
 │       ├── MainActivity.kt
-│       ├── MapScreen.kt       # map + camera layer + paranoia slider
+│       ├── MapScreen.kt       # map + camera layer + avoidance control
 │       └── RouteViewModel.kt  # bridges Compose ⇄ Rust core
 ├── scripts/
 │   ├── fetch_cameras.sh       # Overpass camera fetch (GeoJSON preview)
@@ -48,6 +49,22 @@ edge weight = length_m * (1 + λ * exposure)
 where `exposure ∈ [0,1]` is the fraction of a road segment inside any camera's
 modelled field of view. `λ=0` is a normal shortest path; larger `λ` buys quieter
 routes with longer detours.
+
+## Download
+
+Pre-built APKs are attached to each release:
+**[github.com/phrag/SchattenWeg/releases/latest](https://github.com/phrag/SchattenWeg/releases/latest)**
+(the in-app credit at the bottom of the map opens the same page).
+
+The release workflow generates the offline Berlin data during the build (see
+`.github/workflows/release.yml`), so those APKs **map and route out of the
+box**. They are **debug**-signed with the `.debug` application-id suffix,
+though — installable and usable, but not signed with a release key. For a
+release-key-signed APK, build from source with the keystore in place (below).
+
+(The separate `CI` workflow that runs on every push builds an asset-free debug
+APK — a fast compile check — which renders on a plain background. Releases are
+the builds meant for installing.)
 
 ## Build
 
@@ -130,6 +147,14 @@ git config core.hooksPath .githooks
 ```
 
 CI enforces the same rules on every push (the `hygiene` job).
+
+Kotlin style is checked with [ktlint](https://pinterest.github.io/ktlint/),
+configured for Compose in `.editorconfig`. Format before pushing — CI's
+`ktlint` job fails otherwise:
+
+```bash
+ktlint -F "app/src/main/java/de/schattenweg/**/*.kt" "*.gradle.kts" "app/*.gradle.kts"
+```
 
 ## Privacy posture
 

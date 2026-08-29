@@ -96,6 +96,14 @@ android {
     }
 }
 
+// Name the outputs after the app, not the Gradle module. Without this the APK
+// is "app-debug.apk" / "app-release.apk"; with it the variant name is appended
+// to this base, giving "schattenweg-debug.apk" / "schattenweg-release.apk" —
+// what actually gets attached to GitHub releases (see .github/workflows/release.yml).
+base {
+    archivesName = "schattenweg"
+}
+
 kotlin {
     jvmToolchain(17)
 }

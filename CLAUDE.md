@@ -122,6 +122,19 @@ edge weight = length_m * (1 + λ * exposure)          exposure ∈ [0,1]
 - `λ ≈ 1–3` → sensible avoidance.
 - `λ > 5` → big detours to dodge lenses.
 
+The core takes λ as a continuous f64 and always will — but the **UI no longer
+exposes a raw slider**. It offers three presets, Low/Medium/High → λ 1/3/6
+(`AvoidanceLevel` in `RouteViewModel.kt`); three named choices are easier to
+reason about than a bare number. Two behaviours ride on top, both decided:
+- A **freshly dropped A→B pair defaults to the camera-free route when one
+  exists**: if the chosen level still leaves exposure > 0, the planner retries
+  at the strongest level and adopts that route if it is 0% exposure, raising the
+  displayed level to match (`plan(preferClean = true)`).
+- A **manual** level change is honoured exactly (`preferClean = false`), so
+  Low/Medium still buy a shorter, more-exposed route even when a longer
+  camera-free one exists. Without that, the lower presets would be dead controls
+  whenever a clean route was reachable.
+
 Multiplicative-on-length keeps units in metres-equivalent, which keeps the A*
 straight-line heuristic **admissible** for `λ ≥ 0`.
 
@@ -193,8 +206,17 @@ Track progress against this list when picking the project back up:
 - [x] `scripts/build_map_assets.sh`: Geofabrik (md5-verified) → filtered
       snapshot + Planetiler offline tiles.
 - [x] Android app: Gradle + cargo-ndk + UniFFI bindings + MapLibre map screen
-      (offline tiles, camera layer, tap-to-route, paranoia slider).
+      (offline tiles, camera layer, tap-to-route, Low/Medium/High avoidance
+      control, in-app GitHub credit).
 - [x] CI: Rust fmt/clippy/test + Android assembleDebug + no-Play-Services gate.
+- [x] Release workflow (`.github/workflows/release.yml`): a version tag (or a
+      manual run) generates the offline Berlin assets (`build_map_assets.sh` —
+      needs osmium + Java 21 for Planetiler, so the job sets up both 17 and 21),
+      builds the APK, and publishes it to GitHub Releases. Outputs are named
+      `schattenweg-<variant>.apk` (`base.archivesName`), not `app-<variant>.apk`.
+      Released APKs are offline-complete but **debug-signed** — release-key
+      signing needs the keystore, which never enters the repo. The everyday
+      `ci.yml` still builds an **asset-free** debug APK as a compile check only.
 
 **Verified end to end on an emulator** (2026-08-29, arm64, OpenGL backend):
 the bundled 81 MB PMTiles basemap renders offline from `filesDir`, ingest

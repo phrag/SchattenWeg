@@ -5,14 +5,14 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import uniffi.schattenweg_core.Camera
 import uniffi.schattenweg_core.LatLon
 import uniffi.schattenweg_core.Place
@@ -48,8 +48,15 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
     /** True once [provision] has finished, whatever the outcome. */
     val basemapReady = MutableStateFlow(false)
 
-    /** Paranoia dial, bound to a slider in the UI. 0 = shortest, higher = shyer. */
-    val lambda = MutableStateFlow(2.0)
+    /**
+     * Camera-avoidance strength, bound to a three-way control in the UI. Each
+     * level is a fixed λ into the router's `length * (1 + λ * exposure)` cost
+     * (see CLAUDE.md §4): [AvoidanceLevel.LOW] barely detours, [AvoidanceLevel.HIGH]
+     * takes big detours to dodge lenses. Starts at [AvoidanceLevel.MEDIUM]; an
+     * auto-plan may raise it to HIGH when that is what buys a camera-free route
+     * (see [plan]).
+     */
+    val level = MutableStateFlow(AvoidanceLevel.MEDIUM)
 
     /** Tapped start point, then destination; a third tap starts over. */
     val start = MutableStateFlow<LatLon?>(null)
@@ -128,8 +135,10 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
     private fun RouteException.explain(): String = when (this) {
         is RouteException.NoNearbyNode ->
             "No mapped street near there. Tap closer to a road."
+
         is RouteException.Unreachable ->
             "No walking route between those two points."
+
         is RouteException.LoadFailed ->
             "Could not load the map data: $reason"
     }
@@ -145,19 +154,44 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
             }
         } else {
             end.value = point
-            plan()
+            plan(preferClean = true)
         }
     }
 
-    /** Plan (or re-plan, e.g. after the slider moves) between the two taps. */
-    fun plan() {
+    /**
+     * Plan (or re-plan) between the two taps at the current [level].
+     *
+     * When [preferClean] is set — the default for a freshly completed A→B pair,
+     * not for a manual level change — and the chosen level still leaves the
+     * walker under watch, the planner retries at the strongest level and adopts
+     * that route if it is camera-free (0% exposure), raising [level] to match so
+     * the control reflects what was actually used. The rule: given the choice,
+     * always default to a route with no camera coverage. A manual level change
+     * passes `preferClean = false`, so Low/Medium stay honoured even when a
+     * longer camera-free route exists.
+     */
+    fun plan(preferClean: Boolean = false) {
         val r = router ?: return
         val s = start.value ?: return
         val e = end.value ?: return
         viewModelScope.launch {
             _state.value = UiState.Planning
             _state.value = try {
-                val planned = withContext(Dispatchers.Default) { r.plan(s, e, lambda.value) }
+                val chosen = level.value
+                var planned = withContext(Dispatchers.Default) { r.plan(s, e, chosen.lambda) }
+                if (preferClean && planned.meanExposure > 0.0 && chosen != AvoidanceLevel.HIGH) {
+                    // The two endpoints already routed, so the strict retry can
+                    // only differ in the path it picks, not in whether one
+                    // exists -- but guard it anyway so a surprise failure keeps
+                    // the good route we already have rather than erroring out.
+                    val strict = withContext(Dispatchers.Default) {
+                        runCatching { r.plan(s, e, AvoidanceLevel.HIGH.lambda) }.getOrNull()
+                    }
+                    if (strict != null && strict.meanExposure <= 0.0) {
+                        planned = strict
+                        level.value = AvoidanceLevel.HIGH
+                    }
+                }
                 route.value = planned
                 UiState.Routed(planned)
             } catch (ex: RouteException) {
@@ -181,8 +215,11 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
         val r = router ?: return
         viewModelScope.launch {
             val found = withContext(Dispatchers.Default) { r.camerasNear(centre, radiusM) }
-            Log.d(TAG, "cameras within ${radiusM.toInt()} m of " +
-                "${centre.lat},${centre.lon}: ${found.size}")
+            Log.d(
+                TAG,
+                "cameras within ${radiusM.toInt()} m of " +
+                    "${centre.lat},${centre.lon}: ${found.size}",
+            )
             cameras.value = found
         }
     }
@@ -214,13 +251,13 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
     /** Set the start from a search result; re-plan if a destination exists. */
     fun setStart(point: LatLon) {
         start.value = point
-        if (end.value != null) plan()
+        if (end.value != null) plan(preferClean = true)
     }
 
     /** Set the destination from a search result; re-plan if a start exists. */
     fun setEnd(point: LatLon) {
         end.value = point
-        if (start.value != null) plan()
+        if (start.value != null) plan(preferClean = true)
     }
 
     /** Clear the search box and its results (e.g. after picking a result). */
@@ -243,6 +280,20 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
         data class Routed(val route: Route) : UiState
         data class Error(val message: String) : UiState
     }
+}
+
+/**
+ * The three camera-avoidance settings the UI offers, and the λ each feeds to
+ * [Router.plan]. λ scales the exposure penalty in the edge cost
+ * `length_m * (1 + λ * exposure)`: LOW barely detours, HIGH takes long detours
+ * to dodge cameras. These values replace the old free 0–8 slider — three named
+ * choices are easier to reason about than a bare number, and the router treats
+ * λ continuously so the exact values are just sensible presets (CLAUDE.md §4).
+ */
+enum class AvoidanceLevel(val label: String, val lambda: Double) {
+    LOW("Low", 1.0),
+    MEDIUM("Medium", 3.0),
+    HIGH("High", 6.0),
 }
 
 private const val TAG = "Schattenweg"
