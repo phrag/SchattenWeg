@@ -142,6 +142,12 @@ Both live in `MapScreen.kt`:
 1. "Shows only cameras **mapped in OpenStreetMap**." (Real coverage is higher.)
 2. "Avoiding cameras is **not anonymity**." (And a route that conspicuously weaves
    around every lens can itself be a signal.)
+3. **"© OpenMapTiles © OpenStreetMap contributors"** — an attribution
+   obligation, not a caveat: OSM data is ODbL and the OpenMapTiles schema the
+   basemap is generated with is CC-BY, both of which require a visible credit.
+   Planetiler prints this requirement at the end of every tile build. Bundling
+   the tiles offline does not exempt us. If the basemap is ever regenerated
+   from a different schema, update the credit to match rather than dropping it.
 
 ---
 

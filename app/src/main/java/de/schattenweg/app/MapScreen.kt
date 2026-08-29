@@ -215,6 +215,15 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF9AA4B2),
                 )
+                // Attribution is a licence obligation, not decoration: the OSM
+                // data is ODbL and the OpenMapTiles schema the basemap is built
+                // with is CC-BY, which requires a visible credit. Bundling the
+                // tiles offline does not exempt us -- keep this on screen.
+                Text(
+                    "© OpenMapTiles © OpenStreetMap contributors",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF6E7A8A),
+                )
             }
         }
     }
