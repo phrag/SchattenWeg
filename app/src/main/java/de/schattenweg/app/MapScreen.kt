@@ -100,13 +100,20 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         // offline tiles exist, so it is applied here rather than in factory().
         LaunchedEffect(basemapReady, basemap) {
             if (!basemapReady) return@LaunchedEffect
-            if (basemap == null) {
+            // Captured into a local: `basemap` is a delegated property, so it
+            // cannot be smart-cast to File after the null check.
+            val basemapFile = basemap
+            if (basemapFile == null) {
                 Log.w(TAG, "No basemap bundled: rendering cameras and routes " +
                     "on a plain background. Run scripts/build_map_assets.sh.")
             } else {
-                Log.i(TAG, "Basemap: ${basemap.absolutePath} (${basemap.length()} bytes)")
+                Log.i(
+                    TAG,
+                    "Basemap: ${basemapFile.absolutePath} " +
+                        "(${basemapFile.length()} bytes)",
+                )
             }
-            val styleJson = MapAssets.styleJson(context, basemap)
+            val styleJson = MapAssets.styleJson(context, basemapFile)
             mapView.getMapAsync { map ->
                 map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
                     style.addSource(GeoJsonSource(ROUTE_SOURCE, EMPTY_COLLECTION))
