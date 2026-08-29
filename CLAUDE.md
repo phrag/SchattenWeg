@@ -131,6 +131,13 @@ Done **once** at load time and baked onto edges.
 
 **Modes:** walking only (decided; cycling deferred).
 
+The map draws that same geometry: `coverageGeoJson` in `MapScreen.kt` renders
+a wedge for a fixed camera with a bearing and a disc for everything else,
+deliberately mirroring `camera.rs`. It is there so the user can see what the
+exposure score was actually computed from. **If the coverage rule in
+`camera.rs` changes, change the drawing with it** — a picture that disagrees
+with the model is worse than no picture, because it looks authoritative.
+
 Alternatives considered and **not** chosen: GraphHopper custom model, Valhalla
 `avoid_polygons`. Rejected in favour of the hand-rolled Rust pass because it
 keeps everything on-device, dependency-free, and fully under our control. Revisit
