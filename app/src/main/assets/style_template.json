@@ -10,50 +10,50 @@
   },
   "layers": [
     { "id": "background", "type": "background",
-      "paint": { "background-color": "#10141a" } },
+      "paint": { "background-color": "#171c26" } },
 
     { "id": "landcover", "type": "fill", "source": "omt", "source-layer": "landcover",
-      "paint": { "fill-color": "#141c16", "fill-opacity": 0.55 } },
+      "paint": { "fill-color": "#1b2a1e", "fill-opacity": 0.6 } },
 
     { "id": "landuse-residential", "type": "fill", "source": "omt", "source-layer": "landuse",
       "filter": ["==", "class", "residential"],
-      "paint": { "fill-color": "#151922", "fill-opacity": 0.5 } },
+      "paint": { "fill-color": "#1d2330", "fill-opacity": 0.5 } },
 
     { "id": "park", "type": "fill", "source": "omt", "source-layer": "park",
-      "paint": { "fill-color": "#152019", "fill-opacity": 0.8 } },
+      "paint": { "fill-color": "#1e3124", "fill-opacity": 0.85 } },
 
     { "id": "water", "type": "fill", "source": "omt", "source-layer": "water",
-      "paint": { "fill-color": "#182634" } },
+      "paint": { "fill-color": "#20384f" } },
 
     { "id": "waterway", "type": "line", "source": "omt", "source-layer": "waterway",
-      "paint": { "line-color": "#182634", "line-width": 1.2 } },
+      "paint": { "line-color": "#20384f", "line-width": 1.4 } },
 
     { "id": "building", "type": "fill", "source": "omt", "source-layer": "building",
-      "minzoom": 13,
-      "paint": { "fill-color": "#1a1f26", "fill-outline-color": "#232a33" } },
+      "minzoom": 12,
+      "paint": { "fill-color": "#262d38", "fill-outline-color": "#333c49" } },
 
     { "id": "rail", "type": "line", "source": "omt", "source-layer": "transportation",
       "filter": ["==", "class", "rail"],
-      "paint": { "line-color": "#262d36", "line-width": 1 } },
+      "paint": { "line-color": "#3a4453", "line-width": { "stops": [[11, 0.6], [16, 1.5]] } } },
 
     { "id": "road-path", "type": "line", "source": "omt", "source-layer": "transportation",
-      "filter": ["in", "class", "path", "track"],
-      "paint": { "line-color": "#242b33", "line-width": 1,
+      "filter": ["in", "class", "path", "track"], "minzoom": 14,
+      "paint": { "line-color": "#3a4453", "line-width": 1,
                  "line-dasharray": [2, 1.5] } },
 
     { "id": "road-minor", "type": "line", "source": "omt", "source-layer": "transportation",
       "filter": ["in", "class", "minor", "service"],
-      "paint": { "line-color": "#2a323c",
-                 "line-width": { "stops": [[13, 0.7], [18, 5]] } } },
+      "paint": { "line-color": "#48566a",
+                 "line-width": { "stops": [[12, 0.4], [14, 1.2], [18, 6]] } } },
 
     { "id": "road-major", "type": "line", "source": "omt", "source-layer": "transportation",
       "filter": ["in", "class", "motorway", "trunk", "primary", "secondary", "tertiary"],
-      "paint": { "line-color": "#39434f",
-                 "line-width": { "stops": [[10, 1], [18, 10]] } } },
+      "paint": { "line-color": "#6b7a90",
+                 "line-width": { "stops": [[8, 0.8], [11, 1.8], [14, 3.5], [18, 12]] } } },
 
     { "id": "boundary", "type": "line", "source": "omt", "source-layer": "boundary",
       "filter": ["==", "admin_level", 4],
-      "paint": { "line-color": "#3a3f4a", "line-dasharray": [2, 2] } },
+      "paint": { "line-color": "#4a5060", "line-dasharray": [2, 2], "line-width": 1 } },
 
     { "id": "label-street", "type": "symbol", "source": "omt",
       "source-layer": "transportation_name", "minzoom": 14,
@@ -64,9 +64,9 @@
         "text-size": 11
       },
       "paint": {
-        "text-color": "#9aa4b2",
-        "text-halo-color": "#10141a",
-        "text-halo-width": 1.4
+        "text-color": "#c2cad6",
+        "text-halo-color": "#171c26",
+        "text-halo-width": 1.6
       } },
 
     { "id": "label-transit", "type": "symbol", "source": "omt",
@@ -80,9 +80,9 @@
         "text-offset": [0, 0.6]
       },
       "paint": {
-        "text-color": "#7c94b8",
-        "text-halo-color": "#10141a",
-        "text-halo-width": 1.4
+        "text-color": "#8fa6c8",
+        "text-halo-color": "#171c26",
+        "text-halo-width": 1.6
       } },
 
     { "id": "label-place", "type": "symbol", "source": "omt",
@@ -96,9 +96,9 @@
         "text-letter-spacing": 0.1
       },
       "paint": {
-        "text-color": "#c7d0da",
-        "text-halo-color": "#10141a",
-        "text-halo-width": 1.6
+        "text-color": "#dbe2ea",
+        "text-halo-color": "#171c26",
+        "text-halo-width": 1.8
       } }
   ]
 }

@@ -1,6 +1,7 @@
 package de.schattenweg.app
 
 import android.content.Context
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -106,16 +107,36 @@ object MapAssets {
             // No basemap bundled: bare dark canvas; cameras/route still render.
             return """{"version":8,"name":"fallback","sources":{},"layers":[
                 {"id":"background","type":"background",
-                 "paint":{"background-color":"#10141a"}}]}"""
+                 "paint":{"background-color":"#171c26"}}]}"""
         }
+
         val template = context.assets.open("style_template.json")
             .bufferedReader().use { it.readText() }
-        // MapLibre substitutes {fontstack}/{range} into the glyphs URL.
-        val glyphsUrl = provisioned.glyphsDir?.let {
-            "file://${it.absolutePath}/{fontstack}/{range}.pbf"
-        } ?: ""
-        return template
-            .replace("__PMTILES_URL__", "file://${pmtiles.absolutePath}")
-            .replace("__GLYPHS_URL__", glyphsUrl)
+        val withTiles = template.replace("__PMTILES_URL__", "file://${pmtiles.absolutePath}")
+
+        val glyphs = provisioned.glyphsDir
+        if (glyphs != null) {
+            // MapLibre substitutes {fontstack}/{range} into the glyphs URL.
+            return withTiles.replace(
+                "__GLYPHS_URL__",
+                "file://${glyphs.absolutePath}/{fontstack}/{range}.pbf",
+            )
+        }
+
+        // No glyphs bundled (assets not rebuilt): MapLibre Native fails the
+        // whole style if a symbol layer has no resolvable glyphs URL, which
+        // would blank the basemap entirely -- roads and water included. So
+        // drop the glyphs key and every label (symbol) layer, leaving a
+        // fully renderable basemap with no text until the fonts are built.
+        val root = JSONObject(withTiles)
+        root.remove("glyphs")
+        val layers = root.getJSONArray("layers")
+        val kept = org.json.JSONArray()
+        for (i in 0 until layers.length()) {
+            val layer = layers.getJSONObject(i)
+            if (layer.optString("type") != "symbol") kept.put(layer)
+        }
+        root.put("layers", kept)
+        return root.toString()
     }
 }
