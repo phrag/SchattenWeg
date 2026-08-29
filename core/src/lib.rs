@@ -12,10 +12,12 @@
 mod camera;
 mod exposure;
 mod osm;
+mod places;
 mod routing;
 
 pub use camera::{Camera, CameraKind};
 pub use exposure::{CameraIndex, Edge, Node};
+pub use places::{Place, PlaceIndex, PlaceKind};
 
 use routing::Graph;
 use std::collections::HashMap;
@@ -63,6 +65,7 @@ pub struct Route {
 pub struct Router {
     graph: Graph,
     cameras: CameraIndex,
+    places: PlaceIndex,
     coords: HashMap<u64, (f64, f64)>,
 }
 
@@ -78,7 +81,9 @@ impl Router {
             reason: e.to_string(),
         };
         let cameras = CameraIndex::new(osm::load_cameras(&pbf_path).map_err(load)?);
-        let (nodes, mut edges) = osm::load_graph(&pbf_path).map_err(load)?;
+        let network = osm::load_network(&pbf_path).map_err(load)?;
+        let (nodes, mut edges) = (network.nodes, network.edges);
+        let places = PlaceIndex::new(network.places);
 
         let coords: HashMap<u64, (f64, f64)> =
             nodes.iter().map(|n| (n.id, (n.lat, n.lon))).collect();
@@ -91,6 +96,7 @@ impl Router {
         Ok(Arc::new(Self {
             graph: Graph::new(nodes, edges),
             cameras,
+            places,
             coords,
         }))
     }
@@ -137,5 +143,18 @@ impl Router {
     /// How many cameras the core knows about (for a status line / honesty note).
     pub fn camera_count(&self) -> u64 {
         self.cameras.len() as u64
+    }
+
+    /// Street, locality and station names matching `query`, best first.
+    ///
+    /// There is no geocoder behind this — the names come from the bundled
+    /// extract, so searching leaks nothing and works with the radio off.
+    pub fn search_places(&self, query: String, limit: u32) -> Vec<Place> {
+        self.places.search(&query, limit as usize)
+    }
+
+    /// How many searchable names were found in the extract.
+    pub fn place_count(&self) -> u64 {
+        self.places.len() as u64
     }
 }

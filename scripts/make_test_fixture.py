@@ -39,6 +39,12 @@ nodes += [
                                  ("surveillance:type", "camera"),
                                  ("camera:type", "fixed"),
                                  ("camera:direction", "0")]),
+    # Searchable names: a locality, a station, and a POI that must NOT be
+    # indexed (a cafe is not something you navigate by).
+    (110, "52.5205", "13.4020", [("place", "quarter"), ("name", "Mitte")]),
+    (111, "52.5208", "13.4030", [("railway", "station"),
+                                 ("name", "Bahnhof Schattenweg")]),
+    (112, "52.5203", "13.4010", [("amenity", "cafe"), ("name", "Cafe Blende")]),
     # Non-camera surveillance: ingest must drop both.
     (102, "52.5205", "13.3990", [("man_made", "surveillance"),
                                  ("surveillance:type", "guard")]),
@@ -46,9 +52,13 @@ nodes += [
                                  ("surveillance:type", "ALPR")]),
 ]
 
+# Named so the place search has something to find. Row 0 is deliberately
+# split into two ways sharing one name, as OSM splits a street at junctions.
 ways = [
-    (200, [1, 2, 3, 4, 5], [("highway", "residential")]),
-    (201, [11, 12, 13, 14, 15], [("highway", "residential")]),
+    (200, [1, 2, 3], [("highway", "residential"), ("name", "Kameraweg")]),
+    (202, [3, 4, 5], [("highway", "residential"), ("name", "Kameraweg")]),
+    (201, [11, 12, 13, 14, 15],
+     [("highway", "residential"), ("name", "Schattenallee")]),
 ]
 for col in range(5):
     ways.append((210 + col, [1 + col, 11 + col], [("highway", "footway")]))

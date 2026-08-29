@@ -5,7 +5,7 @@
 //! street grid with a dome camera on the short southern route, plus guard and
 //! ALPR nodes that ingest must drop. See the script for the exact layout.
 
-use schattenweg_core::{LatLon, Router};
+use schattenweg_core::{LatLon, PlaceKind, Router};
 
 fn fixture() -> String {
     format!(
@@ -85,4 +85,42 @@ fn far_away_points_are_refused() {
         lon: 11.6,
     }; // Munich
     assert!(router.plan(start, far, 0.0).is_err());
+}
+
+#[test]
+fn indexes_streets_localities_and_stations() {
+    let router = Router::from_pbf(fixture()).expect("fixture should load");
+    // Two streets (one split across two ways), one quarter, one station.
+    // The cafe must not be indexed.
+    assert_eq!(router.place_count(), 4);
+}
+
+#[test]
+fn finds_a_street_by_partial_name() {
+    let router = Router::from_pbf(fixture()).expect("fixture should load");
+    let hits = router.search_places("kamera".to_string(), 10);
+    assert_eq!(hits.len(), 1, "a split street must collapse to one result");
+    assert_eq!(hits[0].name, "Kameraweg");
+    assert_eq!(hits[0].kind, PlaceKind::Street);
+    // Resolved to a real coordinate on the street, not 0,0.
+    assert!((hits[0].lat - 52.52).abs() < 0.01);
+}
+
+#[test]
+fn finds_a_station_and_a_locality() {
+    let router = Router::from_pbf(fixture()).expect("fixture should load");
+    assert_eq!(
+        router.search_places("bahnhof".to_string(), 5)[0].kind,
+        PlaceKind::Station
+    );
+    assert_eq!(
+        router.search_places("mitte".to_string(), 5)[0].kind,
+        PlaceKind::Locality
+    );
+}
+
+#[test]
+fn does_not_index_arbitrary_pois() {
+    let router = Router::from_pbf(fixture()).expect("fixture should load");
+    assert!(router.search_places("cafe".to_string(), 5).is_empty());
 }

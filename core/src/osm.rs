@@ -11,6 +11,7 @@
 
 use crate::camera::{defaults, haversine_m, Camera, CameraKind};
 use crate::exposure::{Edge, Node};
+use crate::places::{Place, PlaceKind};
 use osmpbf::{Element, ElementReader};
 use std::collections::HashMap;
 
@@ -159,20 +160,37 @@ fn foot_accessible(tags: &[(&str, &str)]) -> bool {
     true
 }
 
-/// Build the walkable graph: collect foot-accessible `highway=*` ways, split
-/// them into per-segment bidirectional [`Edge`]s with great-circle lengths,
-/// and emit the [`Node`] table for exactly the nodes those ways use.
-///
-/// Two streaming passes over the file: ways first (to learn which node ids we
-/// need), then nodes (to resolve coordinates). Order of element types inside
-/// the file therefore doesn't matter.
-pub fn load_graph(pbf_path: &str) -> Result<(Vec<Node>, Vec<Edge>), OsmError> {
+/// The routable network plus the names a user can search for.
+pub struct Network {
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
+    pub places: Vec<Place>,
+}
+
+/// Build the walkable graph and the searchable place list in the same two
+/// passes: ways first (to learn which node ids we need, and to note the named
+/// streets), then nodes (to resolve coordinates, and to pick up places and
+/// stations). Adding a separate pass for names would have cost another full
+/// scan of the extract on every cold start, which is already the slow part.
+pub fn load_network(pbf_path: &str) -> Result<Network, OsmError> {
     // Pass 1: node-id sequences of every walkable way.
     let reader = ElementReader::from_path(pbf_path)?;
     let mut way_node_seqs: Vec<Vec<i64>> = Vec::new();
+    // Street name -> a node on it, resolved to a coordinate in pass 2. Many
+    // ways share a name (a street is split at every junction), so the first
+    // one wins and the rest are ignored.
+    let mut street_anchor: HashMap<String, i64> = HashMap::new();
     reader.for_each(|element| {
         if let Element::Way(way) = element {
             let tags: Vec<(&str, &str)> = way.tags().collect();
+            let get = |k: &str| tags.iter().find(|(tk, _)| *tk == k).map(|&(_, v)| v);
+            if get("highway").is_some() {
+                if let Some(name) = get("name") {
+                    if let Some(first) = way.refs().next() {
+                        street_anchor.entry(name.to_string()).or_insert(first);
+                    }
+                }
+            }
             if foot_accessible(&tags) {
                 way_node_seqs.push(way.refs().collect());
             }
@@ -185,19 +203,39 @@ pub fn load_graph(pbf_path: &str) -> Result<(Vec<Node>, Vec<Edge>), OsmError> {
             needed.insert(id, None);
         }
     }
+    // Street anchors must be resolved too, even when the way itself is not
+    // walkable (a named road we route around is still worth searching for).
+    for &id in street_anchor.values() {
+        needed.entry(id).or_insert(None);
+    }
+    let mut places: Vec<Place> = Vec::new();
 
     // Pass 2: coordinates for exactly those nodes.
     let reader = ElementReader::from_path(pbf_path)?;
     reader.for_each(|element| {
-        let (id, lat, lon) = match &element {
-            Element::Node(n) => (n.id(), n.lat(), n.lon()),
-            Element::DenseNode(n) => (n.id(), n.lat(), n.lon()),
+        let (id, lat, lon, tags): (i64, f64, f64, Vec<(&str, &str)>) = match &element {
+            Element::Node(n) => (n.id(), n.lat(), n.lon(), n.tags().collect()),
+            Element::DenseNode(n) => (n.id(), n.lat(), n.lon(), n.tags().collect()),
             _ => return,
         };
         if let Some(slot) = needed.get_mut(&id) {
             *slot = Some((lat, lon));
         }
+        if let Some(place) = place_from_tags(lat, lon, &tags) {
+            places.push(place);
+        }
     })?;
+
+    for (name, anchor) in street_anchor {
+        if let Some(Some((lat, lon))) = needed.get(&anchor) {
+            places.push(Place {
+                name,
+                kind: PlaceKind::Street,
+                lat: *lat,
+                lon: *lon,
+            });
+        }
+    }
 
     let nodes: Vec<Node> = needed
         .iter()
@@ -238,7 +276,48 @@ pub fn load_graph(pbf_path: &str) -> Result<(Vec<Node>, Vec<Edge>), OsmError> {
         }
     }
 
-    Ok((nodes, edges))
+    Ok(Network {
+        nodes,
+        edges,
+        places,
+    })
+}
+
+/// Localities and transit stops worth searching for. Deliberately narrow:
+/// every shop and bench in OSM would bury the names people actually navigate
+/// by.
+fn place_from_tags(lat: f64, lon: f64, tags: &[(&str, &str)]) -> Option<Place> {
+    let get = |k: &str| tags.iter().find(|(tk, _)| *tk == k).map(|&(_, v)| v);
+    let name = get("name")?;
+
+    const LOCALITIES: &[&str] = &[
+        "city",
+        "borough",
+        "suburb",
+        "quarter",
+        "neighbourhood",
+        "town",
+        "village",
+    ];
+    let kind = match get("place") {
+        Some(p) if LOCALITIES.contains(&p) => PlaceKind::Locality,
+        _ => {
+            let is_station = matches!(get("railway"), Some("station") | Some("halt"))
+                || get("public_transport") == Some("station");
+            if is_station {
+                PlaceKind::Station
+            } else {
+                return None;
+            }
+        }
+    };
+
+    Some(Place {
+        name: name.to_string(),
+        kind,
+        lat,
+        lon,
+    })
 }
 
 #[cfg(test)]
