@@ -72,7 +72,14 @@ self-defeating.** So everything sensitive is on-device.
 - **No Google Play Services / Firebase / analytics.** GrapheneOS is a
   first-class target. A Play Services fallback was explicitly deferred.
 - **All map data bundled in the APK** (pre-filtered snapshot); the app declares
-  no `INTERNET` permission.
+  no `INTERNET` permission. Label glyphs (Latin ranges of Noto Sans only, ~1 MB)
+  are bundled too and copied to `filesDir` beside the tiles — the style's
+  `glyphs` URL is a local `file://` path, so labels render offline.
+- **Search is on-device.** `Router::search_places` scans a name index built
+  during ingest (streets, localities, stations — not arbitrary POIs). There is
+  no geocoder, so searching for a destination reveals nothing to anyone. The
+  index costs nothing extra to build: it is collected in the graph-build passes,
+  not a separate scan.
 - **MapLibre 13.x renders with Vulkan** (its manifest marks Vulkan 1.0
   required). Fine for the Pixel-class hardware GrapheneOS runs on, but
   emulators commonly lack a usable Vulkan driver and then render *nothing* —

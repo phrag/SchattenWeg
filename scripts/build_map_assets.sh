@@ -39,6 +39,17 @@ PLANETILER_VERSION="${PLANETILER_VERSION:-v0.10.2}"
 PLANETILER_JAR="$DATA/planetiler-$PLANETILER_VERSION.jar"
 PLANETILER_URL="https://github.com/onthegomap/planetiler/releases/download/$PLANETILER_VERSION/planetiler.jar"
 
+# Glyph pack for map labels. The full Noto Sans stack is ~33 MB of all
+# Unicode; Berlin only needs the Latin ranges, so just those are bundled.
+FONTS_URL="https://github.com/openmaptiles/fonts/releases/download/v2.0/noto-sans.zip"
+FONTS_ZIP="$DATA/noto-sans.zip"
+# One fontstack is enough; the style references exactly this name.
+FONTSTACK="Noto Sans Regular"
+# Code-point ranges to keep: Basic Latin through Latin Extended-B and the
+# punctuation/symbol blocks a European street map uses. Each file is one
+# 256-code-point range named "<start>-<end>.pbf".
+GLYPH_RANGES=(0 256 512 768 1024 1280 1536 1792 2048 7936 8192 8448 8704)
+
 RETRIES="${RETRIES:-5}"
 
 die() {
@@ -227,14 +238,44 @@ osmium fileinfo -e "$ROUTING" | sed -n 's/^  Number of/  /p' || true
 cp "$ROUTING" "$ASSETS/berlin-routing.osm.pbf"
 echo "-> $ROUTING (bundled into app assets)"
 
-# --- 3. Offline basemap tiles ------------------------------------------------
+# --- 3. Label glyphs ---------------------------------------------------------
 if [[ "${SKIP_TILES:-0}" == "1" ]]; then
-    echo "SKIP_TILES=1 -- skipping basemap generation."
-    echo "The app builds and routes without tiles; the map draws on a plain"
-    echo "background until you re-run without SKIP_TILES."
+    echo "SKIP_TILES=1 -- skipping glyphs and basemap."
+    echo "The app builds and routes without them; the map draws on a plain"
+    echo "background with no labels until you re-run without SKIP_TILES."
     exit 0
 fi
 
+GLYPH_OUT="$ASSETS/glyphs/$FONTSTACK"
+if [[ -d "$GLYPH_OUT" ]] && [[ -n "$(ls -A "$GLYPH_OUT" 2>/dev/null)" ]]; then
+    echo "Using existing glyphs in $GLYPH_OUT"
+else
+    if [[ ! -f "$FONTS_ZIP" ]]; then
+        fetch "$FONTS_URL" "$FONTS_ZIP" "the Noto Sans glyph pack (~60 MB)"
+    fi
+    echo "Extracting Latin glyph ranges for $FONTSTACK..."
+    mkdir -p "$GLYPH_OUT"
+    for start in "${GLYPH_RANGES[@]}"; do
+        name="$start-$((start + 255)).pbf"
+        # -j junks the archive path; -o overwrites; land it in the flat output.
+        if unzip -o -j "$FONTS_ZIP" "$FONTSTACK/$name" -d "$GLYPH_OUT" \
+            >/dev/null 2>&1; then
+            :
+        else
+            echo "  (range $name absent in pack, skipping)"
+        fi
+    done
+    count=$(find "$GLYPH_OUT" -name "*.pbf" | wc -l | tr -d " ")
+    if [[ "$count" -eq 0 ]]; then
+        rm -rf "$ASSETS/glyphs"
+        die "extracted no glyphs -- the font pack layout may have changed.
+Expected files like '$FONTSTACK/0-255.pbf' inside $FONTS_ZIP."
+    fi
+    size=$(du -sh "$ASSETS/glyphs" | cut -f1)
+    echo "-> $ASSETS/glyphs ($count ranges, $size)"
+fi
+
+# --- 4. Offline basemap tiles ------------------------------------------------
 if [[ ! -f "$PLANETILER_JAR" ]]; then
     fetch "$PLANETILER_URL" "$PLANETILER_JAR" "Planetiler $PLANETILER_VERSION"
 fi

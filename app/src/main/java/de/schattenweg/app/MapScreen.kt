@@ -3,26 +3,37 @@ package de.schattenweg.app
 import android.graphics.RectF
 import android.util.Log
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +50,7 @@ import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng as MlLatLng
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
@@ -46,14 +58,33 @@ import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
 import uniffi.schattenweg_core.Camera
 import uniffi.schattenweg_core.CameraKind
+import uniffi.schattenweg_core.Place
+import uniffi.schattenweg_core.PlaceKind
 import uniffi.schattenweg_core.LatLon
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+
+/**
+ * The four toggleable layer groups and the style-layer ids each owns. Camera
+ * dots and coverage are our own overlay layers; labels and buildings are the
+ * basemap's, named to match style_template.json. Keep these in sync with the
+ * style.
+ */
+private enum class LayerGroup(val label: String, val ids: List<String>) {
+    CAMERAS("Cameras", listOf("sw-camera-dots")),
+    COVERAGE("Camera coverage", listOf("sw-camera-coverage-fill")),
+    LABELS("Labels", listOf("label-street", "label-transit", "label-place")),
+    BUILDINGS(
+        "Buildings & landuse",
+        listOf("building", "landuse-residential", "landcover", "park"),
+    ),
+}
 
 private const val CAMERA_SOURCE = "sw-cameras"
 private const val COVERAGE_SOURCE = "sw-camera-coverage"
@@ -81,7 +112,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val start by viewModel.start.collectAsState()
     val end by viewModel.end.collectAsState()
 
-    val basemap by viewModel.basemap.collectAsState()
+    val mapAssets by viewModel.mapAssets.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val searchResults by viewModel.searchResults.collectAsState()
     val basemapReady by viewModel.basemapReady.collectAsState()
     val mapView = remember {
         MapLibre.getInstance(context)
@@ -92,6 +125,10 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     // to rather than a value it would capture stale.
     val mapRef = remember { mutableStateOf<MapLibreMap?>(null) }
     val selectedCameraId = remember { mutableStateOf<Long?>(null) }
+    val layersOn: SnapshotStateMap<LayerGroup, Boolean> = remember {
+        mutableStateMapOf(*LayerGroup.entries.map { it to true }.toTypedArray())
+    }
+    val panelOpen = remember { mutableStateOf(false) }
 
     // MapView is a plain Android view with its own lifecycle contract; forward
     // the host lifecycle to it or the renderer leaks.
@@ -122,22 +159,25 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
         // The style can only be built once provisioning has told us whether
         // offline tiles exist, so it is applied here rather than in factory().
-        LaunchedEffect(basemapReady, basemap) {
+        LaunchedEffect(basemapReady, mapAssets) {
             if (!basemapReady) return@LaunchedEffect
-            // Captured into a local: `basemap` is a delegated property, so it
-            // cannot be smart-cast to File after the null check.
-            val basemapFile = basemap
-            if (basemapFile == null) {
+            // Captured into a local: delegated properties do not smart-cast.
+            val assets = mapAssets
+            val tiles = assets?.pmtiles
+            if (tiles == null) {
                 Log.w(TAG, "No basemap bundled: rendering cameras and routes " +
                     "on a plain background. Run scripts/build_map_assets.sh.")
             } else {
                 Log.i(
                     TAG,
-                    "Basemap: ${basemapFile.absolutePath} " +
-                        "(${basemapFile.length()} bytes)",
+                    "Basemap: ${tiles.absolutePath} (${tiles.length()} bytes), " +
+                        "glyphs: ${assets.glyphsDir?.name ?: "none"}",
                 )
             }
-            val styleJson = MapAssets.styleJson(context, basemapFile)
+            val styleJson = MapAssets.styleJson(
+                context,
+                assets ?: MapAssets.Provisioned(null, null, null),
+            )
             mapView.getMapAsync { map ->
                 map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
                     style.addSource(GeoJsonSource(COVERAGE_SOURCE, EMPTY_COLLECTION))
@@ -234,6 +274,24 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             }
         }
 
+        // Push layer visibility to the style. Keyed on the toggle map and the
+        // asset load so it re-applies when the style is rebuilt.
+        LaunchedEffect(layersOn.toMap(), basemapReady) {
+            mapView.getMapAsync { map ->
+                val style = map.style ?: return@getMapAsync
+                for (group in LayerGroup.entries) {
+                    val visible = layersOn[group] != false
+                    for (id in group.ids) {
+                        style.getLayer(id)?.setProperties(
+                            PropertyFactory.visibility(
+                                if (visible) Property.VISIBLE else Property.NONE,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
         AndroidView(
             factory = {
                 // Without these, a renderer or tile failure is invisible: the
@@ -289,30 +347,67 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             modifier = Modifier.fillMaxSize(),
         )
 
-        StatusCard(
-            state = state,
-            modifier = Modifier
+        Column(
+            Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                // targetSdk 36 draws edge to edge, so without this the card
-                // sits under the clock and status icons.
+                // targetSdk 36 draws edge to edge, so without this it sits
+                // under the clock and status icons.
                 .statusBarsPadding()
                 .padding(12.dp),
-        )
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SearchBar(
+                query = searchQuery,
+                results = searchResults,
+                onQueryChange = { viewModel.searchQuery.value = it },
+                onPick = { place ->
+                    mapRef.value?.animateCamera(
+                        CameraUpdateFactory.newLatLngZoom(
+                            MlLatLng(place.lat, place.lon),
+                            15.0,
+                        ),
+                    )
+                    viewModel.clearSearch()
+                },
+                onUse = { place, asStart ->
+                    val point = LatLon(place.lat, place.lon)
+                    if (asStart) viewModel.setStart(point) else viewModel.setEnd(point)
+                    mapRef.value?.animateCamera(
+                        CameraUpdateFactory.newLatLngZoom(
+                            MlLatLng(place.lat, place.lon),
+                            15.0,
+                        ),
+                    )
+                    viewModel.clearSearch()
+                },
+            )
+            StatusCard(state = state, modifier = Modifier.fillMaxWidth())
+        }
 
-        // Zoom controls, clear of both cards.
+        // Layers toggle + zoom controls, clear of both cards.
         Column(
             Modifier
                 .align(Alignment.CenterEnd)
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            ZoomButton("\u2261") { panelOpen.value = !panelOpen.value }
             ZoomButton("+") {
                 mapRef.value?.animateCamera(CameraUpdateFactory.zoomIn())
             }
             ZoomButton("−") {
                 mapRef.value?.animateCamera(CameraUpdateFactory.zoomOut())
             }
+        }
+
+        if (panelOpen.value) {
+            LayersPanel(
+                layersOn = layersOn,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 68.dp),
+            )
         }
 
         Column(
@@ -362,6 +457,138 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         "© OpenMapTiles © OpenStreetMap contributors",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF6E7A8A),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchBar(
+    query: String,
+    results: List<Place>,
+    onQueryChange: (String) -> Unit,
+    onPick: (Place) -> Unit,
+    onUse: (Place, Boolean) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            placeholder = { Text("Search a street or place") },
+            modifier = Modifier.fillMaxWidth(),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color(0xF210141A),
+                unfocusedContainerColor = Color(0xF210141A),
+                focusedTextColor = Color(0xFFF2F4F8),
+                unfocusedTextColor = Color(0xFFF2F4F8),
+            ),
+        )
+        if (results.isNotEmpty()) {
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xF210141A)),
+            ) {
+                Column(
+                    Modifier
+                        .heightIn(max = 260.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    for (place in results) {
+                        SearchResultRow(place, onPick, onUse)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchResultRow(
+    place: Place,
+    onPick: (Place) -> Unit,
+    onUse: (Place, Boolean) -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onPick(place) }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(
+                place.name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFF2F4F8),
+            )
+            Text(
+                when (place.kind) {
+                    PlaceKind.STREET -> "Street"
+                    PlaceKind.LOCALITY -> "District"
+                    PlaceKind.STATION -> "Station"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF9AA4B2),
+            )
+        }
+        // Set as start or destination directly from a result.
+        Text(
+            "A",
+            style = MaterialTheme.typography.labelLarge,
+            color = Color(0xFF7FD4A2),
+            modifier = Modifier
+                .clickable { onUse(place, true) }
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+        Text(
+            "B",
+            style = MaterialTheme.typography.labelLarge,
+            color = Color(0xFF7FD4A2),
+            modifier = Modifier
+                .clickable { onUse(place, false) }
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+    }
+}
+
+@Composable
+private fun LayersPanel(
+    layersOn: SnapshotStateMap<LayerGroup, Boolean>,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier,
+        colors = CardDefaults.cardColors(containerColor = Color(0xF210141A)),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(
+            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                "Layers",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF9AA4B2),
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            for (group in LayerGroup.entries) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        group.label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFF2F4F8),
+                        modifier = Modifier.padding(end = 12.dp),
+                    )
+                    Switch(
+                        checked = layersOn[group] != false,
+                        onCheckedChange = { layersOn[group] = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF7FD4A2),
+                            checkedTrackColor = Color(0x557FD4A2),
+                        ),
                     )
                 }
             }

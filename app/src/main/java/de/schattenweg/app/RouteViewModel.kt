@@ -4,15 +4,18 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import uniffi.schattenweg_core.Camera
 import uniffi.schattenweg_core.LatLon
+import uniffi.schattenweg_core.Place
 import uniffi.schattenweg_core.Route
 import uniffi.schattenweg_core.RouteException
 import uniffi.schattenweg_core.Router
@@ -36,10 +39,11 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     /**
-     * Path to the offline basemap once provisioned, or null while still
-     * copying / when no tiles are bundled. The map style is built from this.
+     * The provisioned map assets (tiles + glyphs) once copied out, or null
+     * while still copying / when none are bundled. The map style is built
+     * from this.
      */
-    val basemap = MutableStateFlow<File?>(null)
+    val mapAssets = MutableStateFlow<MapAssets.Provisioned?>(null)
 
     /** True once [provision] has finished, whatever the outcome. */
     val basemapReady = MutableStateFlow(false)
@@ -57,6 +61,10 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
     /** The most recent successfully planned route, or null. */
     val route = MutableStateFlow<Route?>(null)
 
+    /** The search box text, and the results for it. */
+    val searchQuery = MutableStateFlow("")
+    val searchResults = MutableStateFlow<List<Place>>(emptyList())
+
     /**
      * Copy the bundled map data out of the APK and build the Rust core from
      * it. Both steps are heavy — the snapshot is tens of megabytes and the
@@ -68,13 +76,14 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
         // change while this ViewModel (and any in-flight load) survives.
         if (router != null || provisioning) return
         provisioning = true
+        startSearchCollector()
         viewModelScope.launch {
             _state.value = UiState.Loading
 
             val assets = withContext(Dispatchers.IO) {
                 MapAssets.ensure(getApplication<Application>())
             }
-            basemap.value = assets.pmtiles
+            mapAssets.value = assets
             basemapReady.value = true
 
             val pbf = assets.routingPbf
@@ -176,6 +185,48 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
                 "${centre.lat},${centre.lon}: ${found.size}")
             cameras.value = found
         }
+    }
+
+    /**
+     * Run the place search off the main thread as the query changes, debounced
+     * so a fast typist does not fire a scan per keystroke. There is no network
+     * here -- search_places reads the bundled index, so this leaks nothing.
+     */
+    @OptIn(FlowPreview::class)
+    private fun startSearchCollector() {
+        viewModelScope.launch {
+            searchQuery
+                .debounce(180)
+                .distinctUntilChanged()
+                .collect { q ->
+                    val r = router
+                    if (r == null || q.isBlank()) {
+                        searchResults.value = emptyList()
+                        return@collect
+                    }
+                    searchResults.value = withContext(Dispatchers.Default) {
+                        r.searchPlaces(q, 8u)
+                    }
+                }
+        }
+    }
+
+    /** Set the start from a search result; re-plan if a destination exists. */
+    fun setStart(point: LatLon) {
+        start.value = point
+        if (end.value != null) plan()
+    }
+
+    /** Set the destination from a search result; re-plan if a start exists. */
+    fun setEnd(point: LatLon) {
+        end.value = point
+        if (start.value != null) plan()
+    }
+
+    /** Clear the search box and its results (e.g. after picking a result). */
+    fun clearSearch() {
+        searchQuery.value = ""
+        searchResults.value = emptyList()
     }
 
     override fun onCleared() {

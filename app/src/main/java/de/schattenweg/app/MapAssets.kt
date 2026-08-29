@@ -21,11 +21,14 @@ object MapAssets {
         val routingPbf: File?,
         /** Offline basemap tiles, or null if not bundled. */
         val pmtiles: File?,
+        /** Directory holding the label glyph tree, or null if not bundled. */
+        val glyphsDir: File?,
     )
 
     private const val ASSET_DIR = "map"
     private const val ROUTING_ASSET = "berlin-routing.osm.pbf"
     private const val TILES_ASSET = "berlin.pmtiles"
+    private const val GLYPHS_ASSET = "glyphs"
 
     fun ensure(context: Context): Provisioned {
         val bundled = context.assets.list(ASSET_DIR)?.toSet() ?: emptySet()
@@ -33,7 +36,35 @@ object MapAssets {
         return Provisioned(
             routingPbf = copyIfBundled(context, bundled, ROUTING_ASSET, outDir),
             pmtiles = copyIfBundled(context, bundled, TILES_ASSET, outDir),
+            glyphsDir = if (GLYPHS_ASSET in bundled) {
+                copyTree(context, "$ASSET_DIR/$GLYPHS_ASSET", File(outDir, GLYPHS_ASSET))
+            } else {
+                null
+            },
         )
+    }
+
+    /**
+     * Recursively copy an asset subtree to [dest]. Glyphs are hundreds of
+     * small .pbf files, not one big one, so this walks the tree; the count is
+     * used as a cheap "already unpacked" check to avoid recopying every launch.
+     */
+    private fun copyTree(context: Context, assetPath: String, dest: File): File? {
+        val children = runCatching { context.assets.list(assetPath) }.getOrNull()
+        if (children.isNullOrEmpty()) {
+            // A leaf: copy the file itself.
+            return runCatching {
+                context.assets.open(assetPath).use { input ->
+                    dest.outputStream().use { input.copyTo(it) }
+                }
+                dest
+            }.getOrNull()
+        }
+        dest.mkdirs()
+        for (child in children) {
+            copyTree(context, "$assetPath/$child", File(dest, child))
+        }
+        return dest
     }
 
     private fun copyIfBundled(
@@ -68,8 +99,9 @@ object MapAssets {
         return out
     }
 
-    /** The MapLibre style JSON, pointing at the local tiles when present. */
-    fun styleJson(context: Context, pmtiles: File?): String {
+    /** The MapLibre style JSON, pointing at the local tiles and glyphs. */
+    fun styleJson(context: Context, provisioned: Provisioned): String {
+        val pmtiles = provisioned.pmtiles
         if (pmtiles == null) {
             // No basemap bundled: bare dark canvas; cameras/route still render.
             return """{"version":8,"name":"fallback","sources":{},"layers":[
@@ -78,6 +110,12 @@ object MapAssets {
         }
         val template = context.assets.open("style_template.json")
             .bufferedReader().use { it.readText() }
-        return template.replace("__PMTILES_URL__", "file://${pmtiles.absolutePath}")
+        // MapLibre substitutes {fontstack}/{range} into the glyphs URL.
+        val glyphsUrl = provisioned.glyphsDir?.let {
+            "file://${it.absolutePath}/{fontstack}/{range}.pbf"
+        } ?: ""
+        return template
+            .replace("__PMTILES_URL__", "file://${pmtiles.absolutePath}")
+            .replace("__GLYPHS_URL__", glyphsUrl)
     }
 }

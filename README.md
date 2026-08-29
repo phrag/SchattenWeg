@@ -7,10 +7,14 @@ routes that **avoid** them. Rust core, Kotlin/Compose UI, no Google.
 
 ## What it does
 
-- Plots `man_made=surveillance` cameras (from OpenStreetMap) on an offline map.
+- Plots `man_made=surveillance` cameras (from OpenStreetMap) on an offline map,
+  drawing each camera's modelled field of view; tap one for its details.
 - Plans a route from A to B that trades detour length against camera exposure,
   controlled by a single "paranoia" slider (λ).
-- Runs entirely on-device: no server sees your location or your routes.
+- Search streets and places, toggle map layers, and zoom — all offline.
+- Runs entirely on-device: no server sees your location or your routes. The
+  place search reads a bundled index, so even typing a destination leaks
+  nothing.
 
 ## Architecture at a glance
 
