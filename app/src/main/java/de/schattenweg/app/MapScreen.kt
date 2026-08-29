@@ -4,7 +4,10 @@ import android.content.Intent
 import android.graphics.RectF
 import android.net.Uri
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,8 +41,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -98,8 +104,8 @@ private const val ENDPOINT_SOURCE = "sw-endpoints"
 /** Berlin, Alexanderplatz — where the map opens. */
 private val BERLIN = LatLng(52.5216, 13.4127)
 
-/** Where to send anyone who taps the in-app credit: the source and the builds. */
-private const val RELEASES_URL = "https://github.com/phrag/SchattenWeg/releases/latest"
+/** Where the in-app credit points: the project on GitHub. */
+private const val PROJECT_URL = "https://github.com/phrag/SchattenWeg"
 
 /**
  * The one screen: a full-bleed offline map with the camera layer, the planned
@@ -134,6 +140,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         mutableStateMapOf(*LayerGroup.entries.map { it to true }.toTypedArray())
     }
     val panelOpen = remember { mutableStateOf(false) }
+    // The avoidance panel starts open (so the honesty notes are seen) but can
+    // be slid shut to uncover the map.
+    val panelCollapsed = remember { mutableStateOf(false) }
 
     // MapView is a plain Android view with its own lifecycle contract; forward
     // the host lifecycle to it or the renderer leaks.
@@ -434,57 +443,34 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 CameraInfoCard(cam) { selectedCameraId.value = null }
             }
 
-            // Avoidance dial + the two honesty notes (see CLAUDE.md §5 — these are
-            // non-negotiable).
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
-            ) {
-                Column(
-                    Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        "Camera avoidance",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFFF2F4F8),
-                    )
-                    AvoidanceSelector(
-                        selected = level,
-                        onSelect = {
-                            viewModel.level.value = it
-                            // A manual pick is honoured as-is: no auto-escalation
-                            // to a camera-free route (that is only the default for
-                            // a freshly dropped A→B pair).
-                            viewModel.plan()
-                        },
-                    )
-                    Text(
-                        "Only cameras mapped in OpenStreetMap — real coverage is " +
-                            "higher. Avoiding them is not anonymity.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF9AA4B2),
-                    )
-                    // One credit line: the map attribution (a licence obligation —
-                    // OSM is ODbL, the OpenMapTiles schema CC-BY, both need a
-                    // visible credit even offline) on the left, and the project
-                    // credit, which taps through to the releases page, on the
-                    // right. ProjectLink launches a browser via an intent, so it
-                    // needs no INTERNET permission of ours.
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            "© OpenMapTiles © OpenStreetMap contributors",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF6E7A8A),
-                            modifier = Modifier.weight(1f),
-                        )
-                        ProjectLink()
-                    }
-                }
-            }
+            // Avoidance control + the two honesty notes (see CLAUDE.md §5 — these
+            // are non-negotiable, so they live in the panel that is open by
+            // default). The panel slides shut to uncover the map.
+            AvoidancePanel(
+                level = level,
+                onSelect = {
+                    viewModel.level.value = it
+                    // A manual pick is honoured as-is: no auto-escalation to a
+                    // camera-free route (that is only the default for a freshly
+                    // dropped A→B pair).
+                    viewModel.plan()
+                },
+                collapsed = panelCollapsed.value,
+                onCollapsedChange = { panelCollapsed.value = it },
+            )
+
+            // Map attribution is a licence obligation (OSM is ODbL, the
+            // OpenMapTiles schema CC-BY — both need a visible credit even
+            // offline), so it stays on screen as its own slim line rather than
+            // hiding with the panel. Right-aligned to sit opposite MapLibre's
+            // own bottom-left credit. The project link lives in the layers panel.
+            Text(
+                "© OpenMapTiles © OpenStreetMap contributors",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF6E7A8A),
+                textAlign = TextAlign.End,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -617,6 +603,66 @@ private fun LayersPanel(
                     )
                 }
             }
+            // Project credit lives here, out of the way of the map.
+            ProjectLink(Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+/**
+ * The bottom control: the avoidance picker and the honesty notes, behind a grab
+ * handle that slides the whole thing shut to uncover the map. Tap the handle to
+ * toggle, or drag it up/down. Open by default so the caveats are seen first.
+ */
+@Composable
+private fun AvoidancePanel(
+    level: AvoidanceLevel,
+    onSelect: (AvoidanceLevel) -> Unit,
+    collapsed: Boolean,
+    onCollapsedChange: (Boolean) -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onCollapsedChange(!collapsed) }
+                    // Key on `collapsed` so the gesture reads the current state,
+                    // not the value captured when the modifier was first applied.
+                    .pointerInput(collapsed) {
+                        detectVerticalDragGestures { _, dragAmount ->
+                            if (dragAmount > 4f && !collapsed) onCollapsedChange(true)
+                            if (dragAmount < -4f && collapsed) onCollapsedChange(false)
+                        }
+                    }
+                    .padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color(0xFF48505C)),
+                )
+            }
+            AnimatedVisibility(visible = !collapsed) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Camera avoidance",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFF2F4F8),
+                    )
+                    AvoidanceSelector(selected = level, onSelect = onSelect)
+                    Text(
+                        "Only cameras mapped in OpenStreetMap — real coverage is " +
+                            "higher. Avoiding them is not anonymity.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF9AA4B2),
+                    )
+                }
+            }
         }
     }
 }
@@ -664,25 +710,25 @@ private fun AvoidanceSelector(
 }
 
 /**
- * A tappable credit that opens the project's GitHub releases in a browser.
+ * A tappable project credit that opens the GitHub repository in a browser.
  * The app declares no INTERNET permission, but an ACTION_VIEW intent hands the
  * URL to the browser — a different app with its own network access — so this
  * leaks nothing and needs no permission of ours.
  */
 @Composable
-private fun ProjectLink() {
+private fun ProjectLink(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     Text(
-        "Schattenweg made by phrag",
+        "Schattenweg on GitHub",
         style = MaterialTheme.typography.labelSmall,
         color = Color(0xFF7FD4A2),
-        modifier = Modifier.clickable {
+        modifier = modifier.clickable {
             runCatching {
                 context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_URL))
+                    Intent(Intent.ACTION_VIEW, Uri.parse(PROJECT_URL))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
-            }.onFailure { Log.w(TAG, "No app to open $RELEASES_URL", it) }
+            }.onFailure { Log.w(TAG, "No app to open $PROJECT_URL", it) }
         },
     )
 }
