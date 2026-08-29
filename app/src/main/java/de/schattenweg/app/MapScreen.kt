@@ -34,6 +34,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -146,10 +148,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     // What the router believes each camera sees. Drawn first
                     // so the dots and the route stay on top of it.
                     style.addLayer(
-                        FillLayer("sw-camera-coverage-fill", COVERAGE_SOURCE).withProperties(
-                            PropertyFactory.fillColor("#e0575b"),
-                            PropertyFactory.fillOpacity(0.16f),
-                        ),
+                        FillLayer("sw-camera-coverage-fill", COVERAGE_SOURCE)
+                            .withProperties(
+                                PropertyFactory.fillColor("#e0575b"),
+                                PropertyFactory.fillOpacity(0.16f),
+                            )
+                            .also { it.minZoom = 14f },
                     )
                     style.addLayer(
                         LineLayer("sw-route-line", ROUTE_SOURCE).withProperties(
@@ -186,7 +190,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         ?: BERLIN
                     viewModel.refreshCameras(
                         LatLon(centre.latitude, centre.longitude),
-                        CAMERA_QUERY_RADIUS_M,
+                        map.viewportRadiusM(),
                     )
                 }
             }
@@ -199,6 +203,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         // data and never again. Naming the values as keys makes the dependency
         // explicit and survives the callback.
         LaunchedEffect(cameras, route, start, end) {
+            // Serialising a few thousand features is real work; a whole-city
+            // viewport makes it large enough to drop frames on the main thread.
+            val cameraJson = withContext(Dispatchers.Default) { camerasGeoJson(cameras) }
+            val coverageJson = withContext(Dispatchers.Default) { coverageGeoJson(cameras) }
+            val routeJson = routeGeoJson(route?.polyline)
+            val endpointJson = pointsGeoJson(listOfNotNull(start, end))
             mapView.getMapAsync { map ->
                 val style = map.style
                 if (style == null) {
@@ -217,10 +227,10 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         "sources=[${cameraSource != null},${routeSource != null}," +
                         "${endpointSource != null}]",
                 )
-                cameraSource?.setGeoJson(camerasGeoJson(cameras))
-                coverageSource?.setGeoJson(coverageGeoJson(cameras))
-                routeSource?.setGeoJson(routeGeoJson(route?.polyline))
-                endpointSource?.setGeoJson(pointsGeoJson(listOfNotNull(start, end)))
+                cameraSource?.setGeoJson(cameraJson)
+                coverageSource?.setGeoJson(coverageJson)
+                routeSource?.setGeoJson(routeJson)
+                endpointSource?.setGeoJson(endpointJson)
             }
         }
 
@@ -270,7 +280,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         val centre = map.cameraPosition.target ?: return@addOnCameraIdleListener
                         viewModel.refreshCameras(
                             LatLon(centre.latitude, centre.longitude),
-                            CAMERA_QUERY_RADIUS_M,
+                            map.viewportRadiusM(),
                         )
                     }
                 }
@@ -472,7 +482,27 @@ private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modif
 
 /** How far around the viewport centre to pull cameras for the map layer. */
 private const val TAG = "Schattenweg"
-private const val CAMERA_QUERY_RADIUS_M = 2_000.0
+/**
+ * How far to ask for cameras, derived from what is actually on screen.
+ *
+ * A fixed radius means zooming out shows more map but no more cameras --
+ * they stop in a disc around the centre. Berlin's extract is a few thousand
+ * cameras, so asking for the whole viewport is cheap; the bounds keep a
+ * degenerate projection from asking for a metre or for the planet.
+ */
+private fun MapLibreMap.viewportRadiusM(): Double {
+    val centre = cameraPosition.target ?: return 2_000.0
+    val bounds = projection.visibleRegion.latLngBounds
+    val corner = LatLng(bounds.latNorth, bounds.lonEast)
+    return centre.distanceTo(corner).coerceIn(500.0, 40_000.0)
+}
+
+/**
+ * Above this many cameras the coverage wedges are sub-pixel clutter and cost
+ * more to build than they convey, so only the dots are drawn. The fill layer
+ * also carries a minzoom for the same reason.
+ */
+private const val MAX_COVERAGE_FEATURES = 1_500
 
 private const val EMPTY_COLLECTION = """{"type":"FeatureCollection","features":[]}"""
 
@@ -495,7 +525,7 @@ private fun camerasGeoJson(cameras: List<Camera>): String {
  * the fact that range and field of view are assumptions, not OSM data.
  */
 private fun coverageGeoJson(cameras: List<Camera>): String {
-    if (cameras.isEmpty()) return EMPTY_COLLECTION
+    if (cameras.isEmpty() || cameras.size > MAX_COVERAGE_FEATURES) return EMPTY_COLLECTION
     val features = cameras.joinToString(",") { c ->
         val dir = c.directionDeg
         val ring = if (c.kind == CameraKind.FIXED && dir != null) {
