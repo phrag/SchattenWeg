@@ -100,6 +100,22 @@ prevents: the lockfile's dependencies impose their own minimum rustc, so
    ./gradlew :app:assembleDebug
    ```
 
+### Blank map?
+
+MapLibre 13.x renders with **Vulkan**, which many emulators do not usefully
+support — the map then draws nothing at all, basemap *and* overlays, which
+looks like missing data but is not. Build the OpenGL ES variant instead:
+
+```bash
+./gradlew :app:assembleDebug -PmaplibreBackend=opengl
+```
+
+The app logs the basemap it found and any MapLibre load failure. Watch it with:
+
+```bash
+adb logcat -s Schattenweg:V Mbgl:V vulkan:V
+```
+
 ## Contributing
 
 Enable the repo's hooks once per clone, so machine-local paths, email

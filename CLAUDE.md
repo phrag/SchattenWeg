@@ -74,9 +74,12 @@ self-defeating.** So everything sensitive is on-device.
 - **All map data bundled in the APK** (pre-filtered snapshot); the app declares
   no `INTERNET` permission.
 - **MapLibre 13.x renders with Vulkan** (its manifest marks Vulkan 1.0
-  required). Fine for the Pixel-class hardware GrapheneOS runs on. If older
-  non-Vulkan devices ever matter, switch the dependency to
-  `org.maplibre.gl:android-sdk-opengl`.
+  required). Fine for the Pixel-class hardware GrapheneOS runs on, but
+  emulators commonly lack a usable Vulkan driver and then render *nothing* —
+  no basemap and no GeoJSON overlays — which is easily misread as a tile or
+  data fault. `-PmaplibreBackend=opengl` selects
+  `org.maplibre.gl:android-sdk-opengl` for those; Vulkan stays the default
+  for real devices.
 - **PMTiles must be read from `filesDir`, not assets** — Android's asset
   manager can't serve the byte-range reads PMTiles needs. `MapAssets` copies
   both the tiles and the routing snapshot out on first launch.

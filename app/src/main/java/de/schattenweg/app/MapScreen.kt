@@ -1,11 +1,14 @@
 package de.schattenweg.app
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -97,6 +100,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         // offline tiles exist, so it is applied here rather than in factory().
         LaunchedEffect(basemapReady, basemap) {
             if (!basemapReady) return@LaunchedEffect
+            if (basemap == null) {
+                Log.w(TAG, "No basemap bundled: rendering cameras and routes " +
+                    "on a plain background. Run scripts/build_map_assets.sh.")
+            } else {
+                Log.i(TAG, "Basemap: ${basemap.absolutePath} (${basemap.length()} bytes)")
+            }
             val styleJson = MapAssets.styleJson(context, basemap)
             mapView.getMapAsync { map ->
                 map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
@@ -142,6 +151,18 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
         AndroidView(
             factory = {
+                // Without these, a renderer or tile failure is invisible: the
+                // map just stays blank.
+                mapView.addOnDidFailLoadingMapListener(
+                    MapView.OnDidFailLoadingMapListener { error ->
+                        Log.e(TAG, "MapLibre failed to load the map: $error")
+                    },
+                )
+                mapView.addOnDidFinishLoadingStyleListener(
+                    MapView.OnDidFinishLoadingStyleListener {
+                        Log.i(TAG, "Map style loaded.")
+                    },
+                )
                 mapView.getMapAsync { map ->
                     map.cameraPosition = CameraPosition.Builder()
                         .target(BERLIN)
@@ -182,6 +203,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                // targetSdk 36 draws edge to edge, so without this the card
+                // sits under the clock and status icons.
+                .statusBarsPadding()
                 .padding(12.dp),
         )
 
@@ -191,6 +215,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(12.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
         ) {
@@ -255,6 +280,7 @@ private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modif
 }
 
 /** How far around the viewport centre to pull cameras for the map layer. */
+private const val TAG = "Schattenweg"
 private const val CAMERA_QUERY_RADIUS_M = 2_000.0
 
 private const val EMPTY_COLLECTION = """{"type":"FeatureCollection","features":[]}"""

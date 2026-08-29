@@ -107,7 +107,17 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
-    implementation(libs.maplibre)
+    // MapLibre 13.x renders with Vulkan by default. Emulators frequently have
+    // no usable Vulkan driver and then draw *nothing* -- no basemap and no
+    // overlays either, which looks identical to a data problem. Build with
+    // -PmaplibreBackend=opengl for the OpenGL ES variant on such devices.
+    implementation(
+        if (providers.gradleProperty("maplibreBackend").getOrElse("vulkan") == "opengl") {
+            libs.maplibre.opengl
+        } else {
+            libs.maplibre
+        },
+    )
     // UniFFI-generated bindings load the Rust core through JNA (Android aar).
     implementation(libs.jna) {
         artifact {
