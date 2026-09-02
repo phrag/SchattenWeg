@@ -1,26 +1,30 @@
 package de.schattenweg.app
 
+import android.content.Intent
 import android.graphics.RectF
+import android.net.Uri
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -31,14 +35,17 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.snapshots.SnapshotStateMap
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -50,7 +57,6 @@ import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
-import org.maplibre.android.geometry.LatLng as MlLatLng
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
@@ -63,12 +69,13 @@ import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
 import uniffi.schattenweg_core.Camera
 import uniffi.schattenweg_core.CameraKind
+import uniffi.schattenweg_core.LatLon
 import uniffi.schattenweg_core.Place
 import uniffi.schattenweg_core.PlaceKind
-import uniffi.schattenweg_core.LatLon
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import org.maplibre.android.geometry.LatLng as MlLatLng
 
 /**
  * The four toggleable layer groups and the style-layer ids each owns. Camera
@@ -88,6 +95,7 @@ private enum class LayerGroup(val label: String, val ids: List<String>) {
 
 private const val CAMERA_SOURCE = "sw-cameras"
 private const val COVERAGE_SOURCE = "sw-camera-coverage"
+
 /** Layer id, needed to hit-test taps against the camera dots. */
 private const val CAMERA_LAYER = "sw-camera-dots"
 private const val ROUTE_SOURCE = "sw-route"
@@ -95,6 +103,9 @@ private const val ENDPOINT_SOURCE = "sw-endpoints"
 
 /** Berlin, Alexanderplatz — where the map opens. */
 private val BERLIN = LatLng(52.5216, 13.4127)
+
+/** Where the in-app credit points: the project on GitHub. */
+private const val PROJECT_URL = "https://github.com/phrag/SchattenWeg"
 
 /**
  * The one screen: a full-bleed offline map with the camera layer, the planned
@@ -106,7 +117,7 @@ private val BERLIN = LatLng(52.5216, 13.4127)
 fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsState()
-    val lambda by viewModel.lambda.collectAsState()
+    val level by viewModel.level.collectAsState()
     val cameras by viewModel.cameras.collectAsState()
     val route by viewModel.route.collectAsState()
     val start by viewModel.start.collectAsState()
@@ -129,6 +140,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         mutableStateMapOf(*LayerGroup.entries.map { it to true }.toTypedArray())
     }
     val panelOpen = remember { mutableStateOf(false) }
+    // The avoidance panel starts open (so the honesty notes are seen) but can
+    // be slid shut to uncover the map.
+    val panelCollapsed = remember { mutableStateOf(false) }
 
     // MapView is a plain Android view with its own lifecycle contract; forward
     // the host lifecycle to it or the renderer leaks.
@@ -137,10 +151,15 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_CREATE -> mapView.onCreate(null)
+
                 Lifecycle.Event.ON_START -> mapView.onStart()
+
                 Lifecycle.Event.ON_RESUME -> mapView.onResume()
+
                 Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+
                 Lifecycle.Event.ON_STOP -> mapView.onStop()
+
                 // ON_DESTROY is deliberately not handled here: onDispose below
                 // owns teardown, so onDestroy is called exactly once.
                 else -> Unit
@@ -156,7 +175,6 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val selectedCamera = cameras.firstOrNull { it.osmId == selectedCameraId.value }
 
     Box(Modifier.fillMaxSize()) {
-
         // The style can only be built once provisioning has told us whether
         // offline tiles exist, so it is applied here rather than in factory().
         LaunchedEffect(basemapReady, mapAssets) {
@@ -165,8 +183,11 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             val assets = mapAssets
             val tiles = assets?.pmtiles
             if (tiles == null) {
-                Log.w(TAG, "No basemap bundled: rendering cameras and routes " +
-                    "on a plain background. Run scripts/build_map_assets.sh.")
+                Log.w(
+                    TAG,
+                    "No basemap bundled: rendering cameras and routes " +
+                        "on a plain background. Run scripts/build_map_assets.sh.",
+                )
             } else {
                 Log.i(
                     TAG,
@@ -418,48 +439,38 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-
             selectedCamera?.let { cam ->
                 CameraInfoCard(cam) { selectedCameraId.value = null }
             }
 
-            // Paranoia dial + the two honesty notes (see CLAUDE.md §5 — these are
-            // non-negotiable).
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
-            ) {
-                Column(
-                    Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        "Camera avoidance: ${"%.1f".format(lambda)}",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = Color(0xFFF2F4F8),
-                    )
-                    Slider(
-                        value = lambda.toFloat(),
-                        onValueChange = { viewModel.lambda.value = it.toDouble() },
-                        onValueChangeFinished = { viewModel.plan() },
-                        valueRange = 0f..8f,
-                    )
-                    Text(
-                        "Shows only cameras mapped in OpenStreetMap — real coverage " +
-                            "is higher. Avoiding them is not anonymity.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF9AA4B2),
-                    )
-                    // Attribution is a licence obligation, not decoration: the OSM
-                    // data is ODbL and the OpenMapTiles schema the basemap is built
-                    // with is CC-BY, which requires a visible credit. Bundling the
-                    // tiles offline does not exempt us -- keep this on screen.
-                    Text(
-                        "© OpenMapTiles © OpenStreetMap contributors",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF6E7A8A),
-                    )
-                }
-            }
+            // Avoidance control + the two honesty notes (see CLAUDE.md §5 — these
+            // are non-negotiable, so they live in the panel that is open by
+            // default). The panel slides shut to uncover the map.
+            AvoidancePanel(
+                level = level,
+                onSelect = {
+                    viewModel.level.value = it
+                    // A manual pick is honoured as-is: no auto-escalation to a
+                    // camera-free route (that is only the default for a freshly
+                    // dropped A→B pair).
+                    viewModel.plan()
+                },
+                collapsed = panelCollapsed.value,
+                onCollapsedChange = { panelCollapsed.value = it },
+            )
+
+            // Map attribution is a licence obligation (OSM is ODbL, the
+            // OpenMapTiles schema CC-BY — both need a visible credit even
+            // offline), so it stays on screen as its own slim line rather than
+            // hiding with the panel. Right-aligned to sit opposite MapLibre's
+            // own bottom-left credit. The project link lives in the layers panel.
+            Text(
+                "© OpenMapTiles © OpenStreetMap contributors",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF6E7A8A),
+                textAlign = TextAlign.End,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -592,8 +603,134 @@ private fun LayersPanel(
                     )
                 }
             }
+            // Project credit lives here, out of the way of the map.
+            ProjectLink(Modifier.padding(top = 8.dp))
         }
     }
+}
+
+/**
+ * The bottom control: the avoidance picker and the honesty notes, behind a grab
+ * handle that slides the whole thing shut to uncover the map. Tap the handle to
+ * toggle, or drag it up/down. Open by default so the caveats are seen first.
+ */
+@Composable
+private fun AvoidancePanel(
+    level: AvoidanceLevel,
+    onSelect: (AvoidanceLevel) -> Unit,
+    collapsed: Boolean,
+    onCollapsedChange: (Boolean) -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onCollapsedChange(!collapsed) }
+                    // Key on `collapsed` so the gesture reads the current state,
+                    // not the value captured when the modifier was first applied.
+                    .pointerInput(collapsed) {
+                        detectVerticalDragGestures { _, dragAmount ->
+                            if (dragAmount > 4f && !collapsed) onCollapsedChange(true)
+                            if (dragAmount < -4f && collapsed) onCollapsedChange(false)
+                        }
+                    }
+                    .padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color(0xFF48505C)),
+                )
+            }
+            AnimatedVisibility(visible = !collapsed) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Camera avoidance",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFF2F4F8),
+                    )
+                    AvoidanceSelector(selected = level, onSelect = onSelect)
+                    Text(
+                        "Only cameras mapped in OpenStreetMap — real coverage is " +
+                            "higher. Avoiding them is not anonymity.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF9AA4B2),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Three-way camera-avoidance picker (Low / Medium / High), replacing the old
+ * free λ slider. The selected segment is filled; the others read as muted
+ * outlines. Mirrors [AvoidanceLevel].
+ */
+@Composable
+private fun AvoidanceSelector(
+    selected: AvoidanceLevel,
+    onSelect: (AvoidanceLevel) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (lvl in AvoidanceLevel.entries) {
+            val on = lvl == selected
+            Card(
+                Modifier
+                    .weight(1f)
+                    .clickable { onSelect(lvl) },
+                shape = RoundedCornerShape(10.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (on) Color(0xFF7FD4A2) else Color(0x22FFFFFF),
+                ),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        lvl.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (on) Color(0xFF10141A) else Color(0xFFC7D0DA),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A tappable project credit that opens the GitHub repository in a browser.
+ * The app declares no INTERNET permission, but an ACTION_VIEW intent hands the
+ * URL to the browser — a different app with its own network access — so this
+ * leaks nothing and needs no permission of ours.
+ */
+@Composable
+private fun ProjectLink(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    Text(
+        "Schattenweg on GitHub",
+        style = MaterialTheme.typography.labelSmall,
+        color = Color(0xFF7FD4A2),
+        modifier = modifier.clickable {
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(PROJECT_URL))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.onFailure { Log.w(TAG, "No app to open $PROJECT_URL", it) }
+        },
+    )
 }
 
 @Composable
@@ -686,12 +823,16 @@ private fun CameraInfoCard(camera: Camera, onDismiss: () -> Unit) {
 private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modifier) {
     val text = when (state) {
         is RouteViewModel.UiState.Loading -> "Loading Berlin surveillance map…"
+
         is RouteViewModel.UiState.Ready ->
             "${state.cameraCount} mapped cameras. Tap a start, then a destination."
+
         is RouteViewModel.UiState.Planning -> "Planning the quiet way…"
+
         is RouteViewModel.UiState.Routed ->
             "${state.route.lengthM.toInt()} m · " +
                 "${(state.route.meanExposure * 100).toInt()}% under watch"
+
         is RouteViewModel.UiState.Error -> state.message
     }
     Card(
@@ -709,6 +850,7 @@ private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modif
 
 /** How far around the viewport centre to pull cameras for the map layer. */
 private const val TAG = "Schattenweg"
+
 /**
  * How far to ask for cameras, derived from what is actually on screen.
  *

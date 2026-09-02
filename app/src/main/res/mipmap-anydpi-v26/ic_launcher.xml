@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive launcher icon. The foreground is the full illustration (a hooded
+  figure routing past CCTV cameras); the launcher masks it to the device's icon
+  shape, so the extreme corners/edges are trimmed. minSdk is 29, so adaptive
+  icons are always available and no density-specific ic_launcher.png fallback is
+  needed. No <monochrome> layer — the art is a full-colour bitmap, not a
+  silhouette.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

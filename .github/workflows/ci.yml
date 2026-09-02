@@ -13,6 +13,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  ktlint:
+    name: Kotlin style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to match the version developers run locally; rules are
+      # configured in .editorconfig (Compose-tuned — see the comments there).
+      - name: Install ktlint
+        run: |
+          curl -fsSL -o /usr/local/bin/ktlint \
+            https://github.com/pinterest/ktlint/releases/download/1.8.0/ktlint
+          chmod +x /usr/local/bin/ktlint
+
+      # Only our own sources: the UniFFI bindings under java/uniffi/ are
+      # generated at build time (and gitignored), so they are never linted.
+      - name: Check Kotlin style
+        run: |
+          ktlint \
+            "app/src/main/java/de/schattenweg/**/*.kt" \
+            "*.gradle.kts" "app/*.gradle.kts"
+
   core:
     name: Rust core
     runs-on: ubuntu-latest

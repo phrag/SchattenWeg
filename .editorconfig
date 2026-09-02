@@ -1,0 +1,36 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{kt,kts}]
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+# ktlint configuration. The defaults are tuned for plain Kotlin and fight a
+# Jetpack Compose UI in a few places, so the rules that would rewrite this
+# project's deliberate style are turned off; everything else stays on and is
+# enforced (see the `ktlint` job in .github/workflows/ci.yml).
+ktlint_code_style = intellij_idea
+
+# @Composable functions are PascalCase by convention (MapScreen, ZoomButton).
+# ktlint's default naming rule flags every one of them.
+ktlint_standard_function-naming = disabled
+
+# This code lays out signatures, argument lists and multiline expressions by
+# hand in the compact Compose idiom (short signatures on one line, trailing
+# lambdas, `= remember {` on the same line). These rules would re-wrap all of
+# that with no readability gain, so they are off; wrapping is still bounded by
+# max_line_length above.
+ktlint_standard_class-signature = disabled
+ktlint_standard_function-signature = disabled
+ktlint_standard_multiline-expression-wrapping = disabled
+ktlint_standard_argument-list-wrapping = disabled
+
+[*.{yml,yaml,json}]
+indent_style = space
+indent_size = 2

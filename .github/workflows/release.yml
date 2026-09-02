@@ -1,30 +1,27 @@
-name: Release APK
+name: Release
 
-# Publishes an installable APK to GitHub Releases so the latest build is always
-# one download away. Two shapes of release:
+# Build the APK and publish it to GitHub Releases so a working, installable
+# build is always one download away (linked from inside the app — see
+# MapScreen.kt's ProjectLink). Three shapes of release:
 #
-#   * push to main  -> a rolling "latest" prerelease, retagged to the new commit
+#   * push to main  -> a rolling "latest" pre-release, retagged to the new
+#                      commit, so the newest build is always downloadable
 #   * push a v* tag -> a permanent, versioned release for that tag
+#   * manual run    -> a throwaway build-<run> pre-release
 #
-# The APK is DEBUG-signed. A debug APK installs and runs, which is what a
-# convenience download needs; it is not a store-grade artifact. Real release
-# signing stays out of the repo (see keystore.properties.example / SECURITY.md),
-# so a proper signed build is produced locally or in a separately-secured job,
-# not here.
-#
-# Every build regenerates the map assets from a freshly downloaded OSM extract,
-# so the cameras bundled in the APK are always the latest OpenStreetMap has
-# (see scripts/build_map_assets.sh). Only the heavy, slow-changing inputs
-# (Planetiler and its natural-earth/water sources, the font pack) are cached;
-# the extract itself never is.
-
+# Every run regenerates the offline Berlin assets from a freshly downloaded
+# extract (scripts/build_map_assets.sh), so a released APK maps and routes out
+# of the box AND carries the latest cameras OpenStreetMap has. Only the heavy,
+# slow-changing inputs (Planetiler + its natural-earth/water sources, the font
+# pack) are cached; the extract and the rendered tiles never are.
 on:
   push:
     branches: ["main"]
     tags: ["v*"]
   workflow_dispatch:
 
-# Creating releases and uploading assets needs write access to repo contents.
+# Creating a release and uploading assets needs write access to the repo's
+# contents; the default token is otherwise read-only (see ci.yml).
 permissions:
   contents: write
 
@@ -38,50 +35,55 @@ env:
 
 jobs:
   release:
-    name: Build and publish APK
+    name: Build & publish APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Java 21 for Planetiler (the tiler requires it); Java 17 is set up last
-      # so it stays the default JAVA_HOME the Gradle/Android build expects.
-      - name: Set up Java 21 (Planetiler)
-        uses: actions/setup-java@v4
+      # Two JDKs: the Android build wants 17 (jvmToolchain(17)), Planetiler
+      # wants 21+. 17 is listed last so it wins JAVA_HOME (Gradle uses it);
+      # the asset step below reaches for $JAVA_HOME_21_X64 explicitly.
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
-      - name: Set up Java 17 (Android build, default)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+          java-version: |
+            21
+            17
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
+
       - uses: gradle/actions/setup-gradle@v4
+
       - uses: android-actions/setup-android@v3
 
-      # Keep in step with ndkVersion in app/build.gradle.kts and ci.yml.
+      # Keep in step with ndkVersion in app/build.gradle.kts.
       - name: Install NDK
         run: |
           sdkmanager --install "ndk;27.2.12479018"
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
       - name: Install Rust with Android targets
+        # rust-toolchain.toml pins the version and both Android targets.
         run: rustup show active-toolchain || rustup toolchain install
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: core
+
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
-      - name: Install osmium
-        run: sudo apt-get update && sudo apt-get install -y osmium-tool
+      # osmium filters the extract to streets + surveillance nodes; unzip pulls
+      # the Latin glyph ranges out of the font pack. Both are used by
+      # scripts/build_map_assets.sh.
+      - name: Install osmium & unzip
+        run: sudo apt-get update && sudo apt-get install -y osmium-tool unzip
 
       # Cache only the big, slow-changing build inputs: the Planetiler jar and
       # its ~1.4 GB of natural-earth / water-polygon sources, and the font pack.
-      # NOT the OSM extract and NOT the rendered tiles -- those must be rebuilt
-      # every run so the bundled cameras stay current.
+      # NOT the OSM extract and NOT the rendered tiles -- those are rebuilt every
+      # run so the bundled cameras stay current.
       - name: Cache Planetiler sources and font pack
         uses: actions/cache@v4
         with:
@@ -91,63 +93,68 @@ jobs:
             data/noto-sans.zip
           key: mapassets-inputs-planetiler-v0.10.2-fonts-v2.0
 
-      # A clean checkout has no cached extract, so this downloads the current
-      # one -- newest cameras by construction. REFRESH=1 makes that explicit and
-      # keeps the run correct even if a future cache ever retained an extract.
+      # Generate the offline Berlin data the app bundles: routing snapshot,
+      # label glyphs and vector basemap tiles, all copied into
+      # app/src/main/assets/map/. This is the ONE network step (Geofabrik +
+      # Planetiler sources); it runs here on the builder, never on the phone.
+      # Planetiler needs Java 21, so this step overrides the Gradle-facing 17.
+      # REFRESH=1 forces the current extract even if a cache ever retained one,
+      # so the cameras in the APK are always the latest.
       - name: Build offline map assets (latest cameras)
         env:
-          JAVA_HOME: ${{ env.JAVA_HOME_21_X64 }}
           REFRESH: "1"
         run: |
-          "$JAVA_HOME/bin/java" -version
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          java -version
           ./scripts/build_map_assets.sh
 
+      # A debug-type APK, but with the Berlin data bundled, so it is a working
+      # offline build (not the blank-basemap fallback ci.yml produces). It is
+      # debug-signed and carries the .debug application-id suffix — the release
+      # notes say so; a release-key-signed build still needs the keystore, which
+      # never enters the repo.
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --no-daemon
 
-      # A surveillance-avoidance app must never ship Google/Play Services. Same
-      # gate as ci.yml, re-checked here because this job produces a shipped APK.
       - name: Check for Google/Play Services dependencies
         run: |
-          ./gradlew :app:dependencies --configuration debugRuntimeClasspath --no-daemon > deps.txt
+          ./gradlew :app:dependencies --configuration debugRuntimeClasspath --no-daemon \
+            > deps.txt
           if grep -Ei "com\.google\.android\.gms|play-services|firebase" deps.txt; then
             echo "::error::Play Services / Firebase dependency found — see CLAUDE.md"
             exit 1
           fi
           echo "No Play Services or Firebase in the dependency tree."
 
-      # Compute the release identity (tag vs rolling latest), name the APK, and
-      # assemble release notes that state exactly how current the cameras are.
+      # Work out which of the three release shapes this run is, name the APK, and
+      # assemble notes that state exactly how current the bundled cameras are
+      # (from data/build-info.txt, written by build_map_assets.sh).
       - name: Prepare release metadata
         id: meta
         run: |
           set -euo pipefail
           short_sha="${GITHUB_SHA::7}"
 
-          # build-info.txt is written by build_map_assets.sh.
           osm_snapshot="unknown"; cameras="unknown"; built_utc="unknown"
-          if [[ -f data/build-info.txt ]]; then
+          if [ -f data/build-info.txt ]; then
             # shellcheck disable=SC1091
-            source data/build-info.txt
+            . data/build-info.txt
             osm_snapshot="${osm_snapshot:-unknown}"
             cameras="${surveillance_nodes:-unknown}"
             built_utc="${built_utc:-unknown}"
           fi
 
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            tag="${GITHUB_REF#refs/tags/}"
-            prerelease=false
-            title="$tag"
-            label="$tag"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="$GITHUB_REF_NAME"; prerelease=false; title="$GITHUB_REF_NAME"; label="$GITHUB_REF_NAME"
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            tag="latest"; prerelease=true; title="Latest build (main@$short_sha)"; label="main-$short_sha"
           else
-            tag="latest"
-            prerelease=true
-            title="Latest build (main@$short_sha)"
-            label="main-$short_sha"
+            tag="build-$GITHUB_RUN_NUMBER"; prerelease=true; title="build-$GITHUB_RUN_NUMBER"; label="build-$GITHUB_RUN_NUMBER"
           fi
 
           apk="schattenweg-${label}-debug.apk"
-          cp app/build/outputs/apk/debug/*.apk "$apk"
+          cp "$(ls app/build/outputs/apk/debug/*.apk | head -n1)" "$apk"
 
           {
             echo "tag=$tag"
@@ -157,7 +164,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           {
-            echo "**Debug-signed APK.** Installs and runs; not a store-grade signed build."
+            echo "Offline build of Schattenweg with the Berlin map data bundled"
+            echo "(routing snapshot + vector basemap + labels), so it maps and"
+            echo "routes out of the box."
             echo ""
             echo "| | |"
             echo "|---|---|"
@@ -166,7 +175,11 @@ jobs:
             echo "| Camera data (OSM snapshot) | $osm_snapshot |"
             echo "| Cameras bundled | $cameras surveillance nodes |"
             echo ""
-            echo "Fully offline: the app declares no \`INTERNET\` permission. Berlin only, for now."
+            echo "**Debug-signed** with the \`.debug\` application-id suffix —"
+            echo "installable and usable, but not signed with a release key."
+            echo "For a release-key-signed APK, build from source with the"
+            echo "keystore in place. Fully offline: the app declares no"
+            echo "\`INTERNET\` permission. Berlin only, for now."
           } > release-notes.md
           echo "--- release notes ---"; cat release-notes.md
 
@@ -184,19 +197,22 @@ jobs:
             --notes-file release-notes.md \
             --prerelease
 
-      # Versioned tag: a permanent release for that exact tag.
-      - name: Publish tagged release
+      # Versioned tag or manual build-<run>: create the release, or just replace
+      # its APK asset if the tag already has one.
+      - name: Publish tagged / manual release
         if: steps.meta.outputs.tag != 'latest'
         env:
           GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
         run: |
           set -euo pipefail
-          gh release create "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" \
-            --title "${{ steps.meta.outputs.title }}" \
-            --notes-file release-notes.md
+          flags=(--title "${{ steps.meta.outputs.title }}" --notes-file release-notes.md)
+          [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          gh release create "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" "${flags[@]}" \
+            || gh release upload "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" --clobber
 
-      # Also attach the APK to the workflow run itself, so it is retrievable even
-      # if the release step is ever skipped (e.g. from a fork without write access).
+      # Also attach the APK to the workflow run, so it is retrievable even if the
+      # release step is skipped (e.g. a fork without contents:write).
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.meta.outputs.apk }}

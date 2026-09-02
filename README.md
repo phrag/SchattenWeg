@@ -41,12 +41,13 @@ Right now the data covers **Berlin only**.
   knows about in Berlin, drawn on an offline map with its modelled field of
   view. Tap one to see its details.
 - **Routes around them.** Pick a start and a destination and Schattenweg finds a
-  walking route that stays out of camera view where it reasonably can. One
-  **"paranoia" slider** sets how much extra walking you'll accept to dodge a
-  lens: all the way down is the normal shortest path; higher values take quieter
-  detours.
+  walking route that stays out of camera view where it reasonably can. A simple
+  **Low / Medium / High** control sets how much extra walking you'll accept to
+  dodge a lens — and when a camera-free route exists, a freshly dropped A→B pair
+  takes it by default.
 - **Finds places offline.** Search streets, neighbourhoods and stations from a
-  bundled index — so even typing a destination reveals nothing to anyone.
+  bundled index — so even typing a destination reveals nothing to anyone. Toggle
+  map layers and zoom, all offline too.
 - **Everything above happens on your phone**, with no connection.
 
 ---
@@ -124,8 +125,8 @@ so rustup installs them on the first build; you don't need `rustup target add`.
    cd core && cargo test
    ```
 
-3. **Try routing from the terminal** — sweeps the paranoia dial (λ) so you can
-   see the trade-off
+3. **Try routing from the terminal** — sweeps the avoidance strength (λ) so you
+   can see the trade-off
    ```bash
    cd core && cargo run --release --example plan_route ../data/berlin-routing.osm.pbf
    ```
@@ -167,8 +168,9 @@ edge weight = length_m * (1 + λ * exposure)
 ```
 
 where `exposure ∈ [0,1]` is the fraction of a road segment inside any camera's
-modelled field of view, and λ is the paranoia slider. `λ=0` is a normal shortest
-path; larger λ buys quieter routes with longer detours.
+modelled field of view, and λ is the avoidance strength — the app's Low / Medium
+/ High control maps to λ 1 / 3 / 6. `λ=0` is a normal shortest path; larger λ
+buys quieter routes with longer detours.
 
 ### Layout
 
@@ -184,7 +186,7 @@ SchattenWeg/
 ├── app/                      # Android: Kotlin + Jetpack Compose + MapLibre
 │   └── src/main/java/de/schattenweg/app/
 │       ├── MainActivity.kt
-│       ├── MapScreen.kt       # map + camera layer + paranoia slider
+│       ├── MapScreen.kt       # map + camera layer + avoidance control
 │       └── RouteViewModel.kt  # bridges Compose ⇄ Rust core
 ├── scripts/
 │   ├── fetch_cameras.sh       # Overpass camera fetch (GeoJSON preview)
@@ -197,8 +199,14 @@ SchattenWeg/
 
 Pushes to `main` publish a rolling **`latest`** debug APK; pushing a `v*` tag
 publishes a versioned one. Both regenerate the map assets from a freshly
-downloaded OSM extract, so a released APK always carries the latest cameras. See
-[`.github/workflows/release.yml`](.github/workflows/release.yml).
+downloaded OSM extract, so a released APK always carries the latest cameras and
+**maps and routes out of the box** — see
+[`.github/workflows/release.yml`](.github/workflows/release.yml). The in-app
+credit at the bottom of the map opens the same Releases page.
+
+The separate `CI` workflow that runs on every push builds an **asset-free**
+debug APK as a fast compile check — it renders on a plain background. The
+Releases builds are the ones meant for installing.
 
 ## Contributing
 
@@ -210,6 +218,14 @@ git config core.hooksPath .githooks
 ```
 
 CI enforces the same rules on every push (the `hygiene` job).
+
+Kotlin style is checked with [ktlint](https://pinterest.github.io/ktlint/),
+configured for Compose in `.editorconfig`. Format before pushing — CI's
+`ktlint` job fails otherwise:
+
+```bash
+ktlint -F "app/src/main/java/de/schattenweg/**/*.kt" "*.gradle.kts" "app/*.gradle.kts"
+```
 
 ## Licence
 
