@@ -22,6 +22,16 @@
 #   SKIP_TILES=1            stop after the routing snapshot
 #   SKIP_CHECKSUM=1         proceed without verifying the extract (unsafe)
 #   RETRIES=<n>             download attempts per file (default 5)
+#   REFRESH=1               discard any cached extract and fetch the CURRENT one,
+#                           so the bundled snapshot always has the latest cameras
+#
+# Camera freshness: cameras are OSM nodes carried inside the extract, so "latest
+# cameras" just means "latest extract". A clean checkout has no cached extract
+# and therefore always downloads the current one -- which is exactly what the
+# release build does. On a working tree that already has data/berlin-latest.osm.pbf
+# from an earlier run, that older extract is reused as-is; pass REFRESH=1 to pull
+# the current one instead. Either way the provenance (OSM snapshot date + camera
+# count) is written to data/build-info.txt and printed at the end.
 
 set -euo pipefail
 
@@ -168,8 +178,16 @@ Nothing has been downloaded yet, so install these and re-run."
 fi
 
 # --- 1. Geofabrik extract ----------------------------------------------------
+# REFRESH=1 drops the cached extract (and its checksum) so the newest published
+# extract is fetched and re-verified. Without it, an extract already on disk is
+# reused -- fast, but as old as the day it was downloaded.
+if [[ "${REFRESH:-0}" == "1" && -f "$RAW" ]]; then
+    echo "REFRESH=1 -- discarding cached extract to fetch the current one."
+    rm -f "$RAW" "$RAW.md5"
+fi
+
 if [[ -f "$RAW" ]]; then
-    echo "Using existing $RAW"
+    echo "Using existing $RAW (pass REFRESH=1 to fetch the current extract)"
 else
     fetch "$GEOFABRIK" "$RAW" "the Berlin OSM extract (~70 MB)"
 fi
@@ -237,6 +255,36 @@ osmium tags-filter --overwrite "$RAW" \
 osmium fileinfo -e "$ROUTING" | sed -n 's/^  Number of/  /p' || true
 cp "$ROUTING" "$ASSETS/berlin-routing.osm.pbf"
 echo "-> $ROUTING (bundled into app assets)"
+
+# Provenance: record what this snapshot actually contains so a build can state
+# how current its cameras are. The OSM snapshot date is the extract's own
+# replication timestamp (when Geofabrik cut it, not when we downloaded it); the
+# camera count is the surveillance nodes in the snapshot. Both are best-effort
+# -- a failure here must not fail the build -- and are written to build-info.txt
+# for the release workflow to fold into its notes.
+BUILD_INFO="$DATA/build-info.txt"
+# `|| true` on each substitution because the script runs under `set -e`: a
+# failed osmium probe here must degrade to "unknown", never abort the build.
+osm_snapshot="$(osmium fileinfo -e -g header.option.osmosis_replication_timestamp \
+    "$RAW" 2>/dev/null | head -1 || true)"
+[[ -z "$osm_snapshot" ]] && osm_snapshot="unknown"
+cam_probe="$DATA/tmp/cameras-probe.osm.pbf"
+mkdir -p "$DATA/tmp"
+cameras=""
+if osmium tags-filter --overwrite "$ROUTING" n/man_made=surveillance \
+    -o "$cam_probe" 2>/dev/null; then
+    cameras="$(osmium fileinfo -e -g data.count.nodes "$cam_probe" 2>/dev/null | head -1 || true)"
+    rm -f "$cam_probe"
+fi
+[[ -z "$cameras" ]] && cameras="unknown"
+{
+    echo "built_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "osm_snapshot=$osm_snapshot"
+    echo "surveillance_nodes=$cameras"
+    echo "extract_source=$GEOFABRIK"
+} > "$BUILD_INFO"
+echo "   cameras: $cameras surveillance nodes  |  OSM snapshot: $osm_snapshot"
+echo "   provenance written to $BUILD_INFO"
 
 # --- 3. Label glyphs ---------------------------------------------------------
 if [[ "${SKIP_TILES:-0}" == "1" ]]; then
