@@ -1,0 +1,204 @@
+name: Release APK
+
+# Publishes an installable APK to GitHub Releases so the latest build is always
+# one download away. Two shapes of release:
+#
+#   * push to main  -> a rolling "latest" prerelease, retagged to the new commit
+#   * push a v* tag -> a permanent, versioned release for that tag
+#
+# The APK is DEBUG-signed. A debug APK installs and runs, which is what a
+# convenience download needs; it is not a store-grade artifact. Real release
+# signing stays out of the repo (see keystore.properties.example / SECURITY.md),
+# so a proper signed build is produced locally or in a separately-secured job,
+# not here.
+#
+# Every build regenerates the map assets from a freshly downloaded OSM extract,
+# so the cameras bundled in the APK are always the latest OpenStreetMap has
+# (see scripts/build_map_assets.sh). Only the heavy, slow-changing inputs
+# (Planetiler and its natural-earth/water sources, the font pack) are cached;
+# the extract itself never is.
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Creating releases and uploading assets needs write access to repo contents.
+permissions:
+  contents: write
+
+concurrency:
+  # One release build at a time per ref; a newer push supersedes an in-flight one.
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Build and publish APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Java 21 for Planetiler (the tiler requires it); Java 17 is set up last
+      # so it stays the default JAVA_HOME the Gradle/Android build expects.
+      - name: Set up Java 21 (Planetiler)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Set up Java 17 (Android build, default)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+
+      # Keep in step with ndkVersion in app/build.gradle.kts and ci.yml.
+      - name: Install NDK
+        run: |
+          sdkmanager --install "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Install Rust with Android targets
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Install osmium
+        run: sudo apt-get update && sudo apt-get install -y osmium-tool
+
+      # Cache only the big, slow-changing build inputs: the Planetiler jar and
+      # its ~1.4 GB of natural-earth / water-polygon sources, and the font pack.
+      # NOT the OSM extract and NOT the rendered tiles -- those must be rebuilt
+      # every run so the bundled cameras stay current.
+      - name: Cache Planetiler sources and font pack
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/planetiler-*.jar
+            data/planetiler-sources
+            data/noto-sans.zip
+          key: mapassets-inputs-planetiler-v0.10.2-fonts-v2.0
+
+      # A clean checkout has no cached extract, so this downloads the current
+      # one -- newest cameras by construction. REFRESH=1 makes that explicit and
+      # keeps the run correct even if a future cache ever retained an extract.
+      - name: Build offline map assets (latest cameras)
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME_21_X64 }}
+          REFRESH: "1"
+        run: |
+          "$JAVA_HOME/bin/java" -version
+          ./scripts/build_map_assets.sh
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      # A surveillance-avoidance app must never ship Google/Play Services. Same
+      # gate as ci.yml, re-checked here because this job produces a shipped APK.
+      - name: Check for Google/Play Services dependencies
+        run: |
+          ./gradlew :app:dependencies --configuration debugRuntimeClasspath --no-daemon > deps.txt
+          if grep -Ei "com\.google\.android\.gms|play-services|firebase" deps.txt; then
+            echo "::error::Play Services / Firebase dependency found — see CLAUDE.md"
+            exit 1
+          fi
+          echo "No Play Services or Firebase in the dependency tree."
+
+      # Compute the release identity (tag vs rolling latest), name the APK, and
+      # assemble release notes that state exactly how current the cameras are.
+      - name: Prepare release metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::7}"
+
+          # build-info.txt is written by build_map_assets.sh.
+          osm_snapshot="unknown"; cameras="unknown"; built_utc="unknown"
+          if [[ -f data/build-info.txt ]]; then
+            # shellcheck disable=SC1091
+            source data/build-info.txt
+            osm_snapshot="${osm_snapshot:-unknown}"
+            cameras="${surveillance_nodes:-unknown}"
+            built_utc="${built_utc:-unknown}"
+          fi
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            prerelease=false
+            title="$tag"
+            label="$tag"
+          else
+            tag="latest"
+            prerelease=true
+            title="Latest build (main@$short_sha)"
+            label="main-$short_sha"
+          fi
+
+          apk="schattenweg-${label}-debug.apk"
+          cp app/build/outputs/apk/debug/*.apk "$apk"
+
+          {
+            echo "tag=$tag"
+            echo "prerelease=$prerelease"
+            echo "title=$title"
+            echo "apk=$apk"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "**Debug-signed APK.** Installs and runs; not a store-grade signed build."
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`$short_sha\` |"
+            echo "| Built (UTC) | $built_utc |"
+            echo "| Camera data (OSM snapshot) | $osm_snapshot |"
+            echo "| Cameras bundled | $cameras surveillance nodes |"
+            echo ""
+            echo "Fully offline: the app declares no \`INTERNET\` permission. Berlin only, for now."
+          } > release-notes.md
+          echo "--- release notes ---"; cat release-notes.md
+
+      # Rolling "latest": move the tag to this commit by replacing the release.
+      - name: Publish rolling latest release
+        if: steps.meta.outputs.tag == 'latest'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest "${{ steps.meta.outputs.apk }}" \
+            --target "$GITHUB_SHA" \
+            --title "${{ steps.meta.outputs.title }}" \
+            --notes-file release-notes.md \
+            --prerelease
+
+      # Versioned tag: a permanent release for that exact tag.
+      - name: Publish tagged release
+        if: steps.meta.outputs.tag != 'latest'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" \
+            --title "${{ steps.meta.outputs.title }}" \
+            --notes-file release-notes.md
+
+      # Also attach the APK to the workflow run itself, so it is retrievable even
+      # if the release step is ever skipped (e.g. from a fork without write access).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.apk }}
+          path: ${{ steps.meta.outputs.apk }}
+          if-no-files-found: error
