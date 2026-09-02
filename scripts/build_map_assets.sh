@@ -78,6 +78,51 @@ md5_hex() {
     fi
 }
 
+# Print the SHA-256 hex of a file. Linux has sha256sum; macOS ships `shasum`.
+sha256_hex() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
+# Verify file $1 against the SHA-256 a release publishes beside it at URL $2.
+# The tiny checksum is fetched fresh every run, so a corrupted or tampered
+# download -- including a poisoned build cache holding an old jar -- is caught
+# each time, not just on first download. If the checksum host is unreachable, a
+# previously fetched copy is reused rather than failing an offline re-run.
+verify_sha256() {
+    local file="$1" url="$2" what="$3" shafile
+    shafile="$file.sha256"
+    if curl -fsSL --retry "$RETRIES" --retry-delay 3 \
+        --connect-timeout 20 --max-time 60 "$url" -o "$shafile.new" 2>/dev/null; then
+        mv "$shafile.new" "$shafile"
+    else
+        rm -f "$shafile.new"
+        if [[ -f "$shafile" ]] && grep -qE '^[0-9a-fA-F]{64}' "$shafile"; then
+            echo "  (could not refetch $what checksum; using cached copy)"
+        else
+            die "have $what but could not fetch its checksum from
+  $url
+Re-run when the host is reachable, or verify by hand and compare against
+$url:
+  sha256sum $file"
+        fi
+    fi
+    local published actual
+    published="$(awk '{print $1}' "$shafile")"
+    actual="$(sha256_hex "$file")"
+    if [[ -z "$published" || "$published" != "$actual" ]]; then
+        die "checksum mismatch for $file
+  published: ${published:-<none found>}
+  actual:    $actual
+The download is corrupt or was tampered with. Delete it and re-run:
+  rm $file && $0"
+    fi
+    echo "  $what checksum OK ($actual)"
+}
+
 # Download to a .part file and move it into place only on success, so an
 # interrupted or failed transfer never leaves a truncated file that the next
 # run mistakes for a complete one. Retries cover transient 5xx (502/503/504),
@@ -301,6 +346,23 @@ else
     if [[ ! -f "$FONTS_ZIP" ]]; then
         fetch "$FONTS_URL" "$FONTS_ZIP" "the Noto Sans glyph pack (~60 MB)"
     fi
+    # The openmaptiles/fonts v2.0 release publishes no checksum for
+    # noto-sans.zip (only noto-open-sans.zip carries one), so this hash is
+    # pinned from the vetted copy this project's releases were built from
+    # (trust-on-first-use). It makes a later tamper or a silently changed asset
+    # detectable; bump it deliberately if FONTS_URL is ever repointed.
+    FONTS_SHA256="d117316544b43a5dde7ee761b36e17701e9f85574e181d76a74814240fdbaf34"
+    actual_fonts="$(sha256_hex "$FONTS_ZIP")"
+    if [[ "$actual_fonts" != "$FONTS_SHA256" ]]; then
+        die "checksum mismatch for $FONTS_ZIP
+  pinned: $FONTS_SHA256
+  actual: $actual_fonts
+The font pack differs from the pinned copy -- corrupt, tampered, or the
+upstream asset changed. Delete it and re-run, and if the change is legitimate
+update FONTS_SHA256 in this script:
+  rm $FONTS_ZIP && $0"
+    fi
+    echo "  glyph pack checksum OK ($actual_fonts)"
     echo "Extracting Latin glyph ranges for $FONTSTACK..."
     mkdir -p "$GLYPH_OUT"
     for start in "${GLYPH_RANGES[@]}"; do
@@ -327,6 +389,9 @@ fi
 if [[ ! -f "$PLANETILER_JAR" ]]; then
     fetch "$PLANETILER_URL" "$PLANETILER_JAR" "Planetiler $PLANETILER_VERSION"
 fi
+# The jar is executed with the same JVM that renders the tiles, so verify it
+# against the SHA-256 the Planetiler release publishes next to it before running.
+verify_sha256 "$PLANETILER_JAR" "$PLANETILER_URL.sha256" "Planetiler $PLANETILER_VERSION"
 
 echo "Rendering Berlin vector tiles (this takes a few minutes)..."
 java -Xmx3g -jar "$PLANETILER_JAR" \
