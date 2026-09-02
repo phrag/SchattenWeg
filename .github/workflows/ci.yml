@@ -25,6 +25,11 @@ jobs:
         run: |
           curl -fsSL -o /usr/local/bin/ktlint \
             https://github.com/pinterest/ktlint/releases/download/1.8.0/ktlint
+          # Verify the downloaded binary before it is made executable and run:
+          # this fetches and executes a release asset, so pin its SHA-256 (the
+          # value GitHub publishes for the 1.8.0 `ktlint` asset).
+          echo "a3fd620207d5c40da6ca789b95e7f823c54e854b7fade7f613e91096a3706d75  /usr/local/bin/ktlint" \
+            | sha256sum -c -
           chmod +x /usr/local/bin/ktlint
 
       # Only our own sources: the UniFFI bindings under java/uniffi/ are

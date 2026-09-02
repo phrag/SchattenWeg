@@ -22,6 +22,16 @@
 #   SKIP_TILES=1            stop after the routing snapshot
 #   SKIP_CHECKSUM=1         proceed without verifying the extract (unsafe)
 #   RETRIES=<n>             download attempts per file (default 5)
+#   REFRESH=1               discard any cached extract and fetch the CURRENT one,
+#                           so the bundled snapshot always has the latest cameras
+#
+# Camera freshness: cameras are OSM nodes carried inside the extract, so "latest
+# cameras" just means "latest extract". A clean checkout has no cached extract
+# and therefore always downloads the current one -- which is exactly what the
+# release build does. On a working tree that already has data/berlin-latest.osm.pbf
+# from an earlier run, that older extract is reused as-is; pass REFRESH=1 to pull
+# the current one instead. Either way the provenance (OSM snapshot date + camera
+# count) is written to data/build-info.txt and printed at the end.
 
 set -euo pipefail
 
@@ -66,6 +76,51 @@ md5_hex() {
     else
         md5 -q "$1"
     fi
+}
+
+# Print the SHA-256 hex of a file. Linux has sha256sum; macOS ships `shasum`.
+sha256_hex() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
+# Verify file $1 against the SHA-256 a release publishes beside it at URL $2.
+# The tiny checksum is fetched fresh every run, so a corrupted or tampered
+# download -- including a poisoned build cache holding an old jar -- is caught
+# each time, not just on first download. If the checksum host is unreachable, a
+# previously fetched copy is reused rather than failing an offline re-run.
+verify_sha256() {
+    local file="$1" url="$2" what="$3" shafile
+    shafile="$file.sha256"
+    if curl -fsSL --retry "$RETRIES" --retry-delay 3 \
+        --connect-timeout 20 --max-time 60 "$url" -o "$shafile.new" 2>/dev/null; then
+        mv "$shafile.new" "$shafile"
+    else
+        rm -f "$shafile.new"
+        if [[ -f "$shafile" ]] && grep -qE '^[0-9a-fA-F]{64}' "$shafile"; then
+            echo "  (could not refetch $what checksum; using cached copy)"
+        else
+            die "have $what but could not fetch its checksum from
+  $url
+Re-run when the host is reachable, or verify by hand and compare against
+$url:
+  sha256sum $file"
+        fi
+    fi
+    local published actual
+    published="$(awk '{print $1}' "$shafile")"
+    actual="$(sha256_hex "$file")"
+    if [[ -z "$published" || "$published" != "$actual" ]]; then
+        die "checksum mismatch for $file
+  published: ${published:-<none found>}
+  actual:    $actual
+The download is corrupt or was tampered with. Delete it and re-run:
+  rm $file && $0"
+    fi
+    echo "  $what checksum OK ($actual)"
 }
 
 # Download to a .part file and move it into place only on success, so an
@@ -168,8 +223,16 @@ Nothing has been downloaded yet, so install these and re-run."
 fi
 
 # --- 1. Geofabrik extract ----------------------------------------------------
+# REFRESH=1 drops the cached extract (and its checksum) so the newest published
+# extract is fetched and re-verified. Without it, an extract already on disk is
+# reused -- fast, but as old as the day it was downloaded.
+if [[ "${REFRESH:-0}" == "1" && -f "$RAW" ]]; then
+    echo "REFRESH=1 -- discarding cached extract to fetch the current one."
+    rm -f "$RAW" "$RAW.md5"
+fi
+
 if [[ -f "$RAW" ]]; then
-    echo "Using existing $RAW"
+    echo "Using existing $RAW (pass REFRESH=1 to fetch the current extract)"
 else
     fetch "$GEOFABRIK" "$RAW" "the Berlin OSM extract (~70 MB)"
 fi
@@ -238,6 +301,36 @@ osmium fileinfo -e "$ROUTING" | sed -n 's/^  Number of/  /p' || true
 cp "$ROUTING" "$ASSETS/berlin-routing.osm.pbf"
 echo "-> $ROUTING (bundled into app assets)"
 
+# Provenance: record what this snapshot actually contains so a build can state
+# how current its cameras are. The OSM snapshot date is the extract's own
+# replication timestamp (when Geofabrik cut it, not when we downloaded it); the
+# camera count is the surveillance nodes in the snapshot. Both are best-effort
+# -- a failure here must not fail the build -- and are written to build-info.txt
+# for the release workflow to fold into its notes.
+BUILD_INFO="$DATA/build-info.txt"
+# `|| true` on each substitution because the script runs under `set -e`: a
+# failed osmium probe here must degrade to "unknown", never abort the build.
+osm_snapshot="$(osmium fileinfo -e -g header.option.osmosis_replication_timestamp \
+    "$RAW" 2>/dev/null | head -1 || true)"
+[[ -z "$osm_snapshot" ]] && osm_snapshot="unknown"
+cam_probe="$DATA/tmp/cameras-probe.osm.pbf"
+mkdir -p "$DATA/tmp"
+cameras=""
+if osmium tags-filter --overwrite "$ROUTING" n/man_made=surveillance \
+    -o "$cam_probe" 2>/dev/null; then
+    cameras="$(osmium fileinfo -e -g data.count.nodes "$cam_probe" 2>/dev/null | head -1 || true)"
+    rm -f "$cam_probe"
+fi
+[[ -z "$cameras" ]] && cameras="unknown"
+{
+    echo "built_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "osm_snapshot=$osm_snapshot"
+    echo "surveillance_nodes=$cameras"
+    echo "extract_source=$GEOFABRIK"
+} > "$BUILD_INFO"
+echo "   cameras: $cameras surveillance nodes  |  OSM snapshot: $osm_snapshot"
+echo "   provenance written to $BUILD_INFO"
+
 # --- 3. Label glyphs ---------------------------------------------------------
 if [[ "${SKIP_TILES:-0}" == "1" ]]; then
     echo "SKIP_TILES=1 -- skipping glyphs and basemap."
@@ -253,6 +346,23 @@ else
     if [[ ! -f "$FONTS_ZIP" ]]; then
         fetch "$FONTS_URL" "$FONTS_ZIP" "the Noto Sans glyph pack (~60 MB)"
     fi
+    # The openmaptiles/fonts v2.0 release publishes no checksum for
+    # noto-sans.zip (only noto-open-sans.zip carries one), so this hash is
+    # pinned from the vetted copy this project's releases were built from
+    # (trust-on-first-use). It makes a later tamper or a silently changed asset
+    # detectable; bump it deliberately if FONTS_URL is ever repointed.
+    FONTS_SHA256="d117316544b43a5dde7ee761b36e17701e9f85574e181d76a74814240fdbaf34"
+    actual_fonts="$(sha256_hex "$FONTS_ZIP")"
+    if [[ "$actual_fonts" != "$FONTS_SHA256" ]]; then
+        die "checksum mismatch for $FONTS_ZIP
+  pinned: $FONTS_SHA256
+  actual: $actual_fonts
+The font pack differs from the pinned copy -- corrupt, tampered, or the
+upstream asset changed. Delete it and re-run, and if the change is legitimate
+update FONTS_SHA256 in this script:
+  rm $FONTS_ZIP && $0"
+    fi
+    echo "  glyph pack checksum OK ($actual_fonts)"
     echo "Extracting Latin glyph ranges for $FONTSTACK..."
     mkdir -p "$GLYPH_OUT"
     for start in "${GLYPH_RANGES[@]}"; do
@@ -279,6 +389,9 @@ fi
 if [[ ! -f "$PLANETILER_JAR" ]]; then
     fetch "$PLANETILER_URL" "$PLANETILER_JAR" "Planetiler $PLANETILER_VERSION"
 fi
+# The jar is executed with the same JVM that renders the tiles, so verify it
+# against the SHA-256 the Planetiler release publishes next to it before running.
+verify_sha256 "$PLANETILER_JAR" "$PLANETILER_URL.sha256" "Planetiler $PLANETILER_VERSION"
 
 echo "Rendering Berlin vector tiles (this takes a few minutes)..."
 java -Xmx3g -jar "$PLANETILER_JAR" \
