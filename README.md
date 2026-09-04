@@ -227,6 +227,15 @@ configured for Compose in `.editorconfig`. Format before pushing — CI's
 ktlint -F "app/src/main/java/de/schattenweg/**/*.kt" "*.gradle.kts" "app/*.gradle.kts"
 ```
 
+## Credits
+
+- Camera, street and place data are **© [OpenStreetMap](https://www.openstreetmap.org/)
+  contributors** — the whole map is their work, and Schattenweg is only useful
+  because they mapped it.
+- Inspired by **[osmcamera.dihe.de](https://osmcamera.dihe.de/)**, the OSM camera
+  map that first prompted this project. Schattenweg reads OpenStreetMap directly
+  rather than building on it (see [CLAUDE.md](CLAUDE.md) for the reasoning).
+
 ## Licence
 
 GPL-3.0-or-later. Map data © OpenStreetMap contributors, available under the
