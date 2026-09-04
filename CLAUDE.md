@@ -178,6 +178,11 @@ Both live in `MapScreen.kt`:
    Planetiler prints this requirement at the end of every tile build. Bundling
    the tiles offline does not exempt us. If the basemap is ever regenerated
    from a different schema, update the credit to match rather than dropping it.
+   This credit now lives in the layers (burger ☰) panel's **About** section,
+   next to the GitHub and "by phrag" maintainer links, rather than as a
+   standalone on-map line. Always-visible attribution is carried by MapLibre's
+   own bottom-left © / ⓘ control, which stays enabled; the About text is the
+   explicit ODbL+CC-BY credit. Do not drop either.
 
 ---
 

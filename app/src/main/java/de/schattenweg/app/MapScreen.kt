@@ -45,7 +45,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -106,6 +105,9 @@ private val BERLIN = LatLng(52.5216, 13.4127)
 
 /** Where the in-app credit points: the project on GitHub. */
 private const val PROJECT_URL = "https://github.com/phrag/SchattenWeg"
+
+/** The maintainer's GitHub profile, shown as "by phrag" in the About section. */
+private const val MAINTAINER_URL = "https://github.com/phrag"
 
 /**
  * The one screen: a full-bleed offline map with the camera layer, the planned
@@ -458,19 +460,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 collapsed = panelCollapsed.value,
                 onCollapsedChange = { panelCollapsed.value = it },
             )
-
-            // Map attribution is a licence obligation (OSM is ODbL, the
-            // OpenMapTiles schema CC-BY — both need a visible credit even
-            // offline), so it stays on screen as its own slim line rather than
-            // hiding with the panel. Right-aligned to sit opposite MapLibre's
-            // own bottom-left credit. The project link lives in the layers panel.
-            Text(
-                "© OpenMapTiles © OpenStreetMap contributors",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF6E7A8A),
-                textAlign = TextAlign.End,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // The map attribution (a licence obligation) and the project links
+            // now live in the layers panel's About section. MapLibre's own
+            // bottom-left © control keeps OSM attribution on screen regardless.
         }
     }
 }
@@ -603,8 +595,24 @@ private fun LayersPanel(
                     )
                 }
             }
-            // Project credit lives here, out of the way of the map.
-            ProjectLink(Modifier.padding(top = 8.dp))
+            // Credits live here, out of the way of the map: the map attribution
+            // (a licence obligation — OSM data is ODbL, the OpenMapTiles schema
+            // CC-BY, both needing a visible credit even offline) alongside the
+            // project and maintainer links. MapLibre's own bottom-left © control
+            // keeps OSM attribution on screen even when this panel is closed.
+            Text(
+                "About",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF9AA4B2),
+                modifier = Modifier.padding(top = 10.dp),
+            )
+            Text(
+                "© OpenMapTiles © OpenStreetMap contributors",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF6E7A8A),
+            )
+            LinkText("Schattenweg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
+            LinkText("by phrag", MAINTAINER_URL)
         }
     }
 }
@@ -710,25 +718,25 @@ private fun AvoidanceSelector(
 }
 
 /**
- * A tappable project credit that opens the GitHub repository in a browser.
- * The app declares no INTERNET permission, but an ACTION_VIEW intent hands the
- * URL to the browser — a different app with its own network access — so this
- * leaks nothing and needs no permission of ours.
+ * A tappable link that opens [url] in a browser. The app declares no INTERNET
+ * permission, but an ACTION_VIEW intent hands the URL to the browser — a
+ * different app with its own network access — so this leaks nothing and needs
+ * no permission of ours.
  */
 @Composable
-private fun ProjectLink(modifier: Modifier = Modifier) {
+private fun LinkText(text: String, url: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     Text(
-        "Schattenweg on GitHub",
+        text,
         style = MaterialTheme.typography.labelSmall,
         color = Color(0xFF7FD4A2),
         modifier = modifier.clickable {
             runCatching {
                 context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(PROJECT_URL))
+                    Intent(Intent.ACTION_VIEW, Uri.parse(url))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
-            }.onFailure { Log.w(TAG, "No app to open $PROJECT_URL", it) }
+            }.onFailure { Log.w(TAG, "No app to open $url", it) }
         },
     )
 }
