@@ -223,7 +223,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             }
             val styleJson = MapAssets.styleJson(
                 context,
-                assets ?: MapAssets.Provisioned(null, null, null),
+                assets ?: MapAssets.Provisioned(
+                    routingPbf = null,
+                    routingCache = null,
+                    pmtiles = null,
+                    glyphsDir = null,
+                ),
             )
             mapView.getMapAsync { map ->
                 map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
