@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.RectF
 import android.net.Uri
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -109,6 +111,19 @@ private const val PROJECT_URL = "https://github.com/phrag/SchattenWeg"
 /** The maintainer's GitHub profile, shown as "by phrag" in the About section. */
 private const val MAINTAINER_URL = "https://github.com/phrag"
 
+/** The renderer, credited in the About section (its on-map badge is disabled). */
+private const val MAPLIBRE_URL = "https://maplibre.org/"
+
+/** OSM's copyright/licence page — the ODbL attribution link. */
+private const val OSM_COPYRIGHT_URL = "https://www.openstreetmap.org/copyright"
+
+/** The OpenMapTiles schema (CC-BY) the basemap is generated from. */
+private const val OPENMAPTILES_URL = "https://openmaptiles.org/"
+
+/** Bundled-dependency licences (MapLibre, Noto, JNA, …), kept in the repo. */
+private const val THIRD_PARTY_LICENSES_URL =
+    "https://github.com/phrag/SchattenWeg/blob/main/THIRD_PARTY_LICENSES.md"
+
 /**
  * The one screen: a full-bleed offline map with the camera layer, the planned
  * route, and the paranoia slider pinned to the bottom.
@@ -118,6 +133,13 @@ private const val MAINTAINER_URL = "https://github.com/phrag"
 @Composable
 fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val context = LocalContext.current
+    // Shown in the About section. Read from the installed package so it always
+    // matches the actual APK; null (and so hidden) only if the lookup fails.
+    val appVersion = remember(context) {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull()
+    }
     val state by viewModel.state.collectAsState()
     val level by viewModel.level.collectAsState()
     val cameras by viewModel.cameras.collectAsState()
@@ -142,6 +164,8 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         mutableStateMapOf(*LayerGroup.entries.map { it to true }.toTypedArray())
     }
     val panelOpen = remember { mutableStateOf(false) }
+    // The full-screen open-source-licences view (BSD/OFL texts bundled offline).
+    val licensesOpen = remember { mutableStateOf(false) }
     // The avoidance panel starts open (so the honesty notes are seen) but can
     // be slid shut to uncover the map.
     val panelCollapsed = remember { mutableStateOf(false) }
@@ -331,6 +355,11 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 )
                 mapView.getMapAsync { map ->
                     mapRef.value = map
+                    // The renderer's own bottom-left badge (MapLibre logo + the
+                    // ⓘ attribution button) is turned off; that credit now lives
+                    // in the layers panel's About section instead.
+                    map.uiSettings.isLogoEnabled = false
+                    map.uiSettings.isAttributionEnabled = false
                     map.cameraPosition = CameraPosition.Builder()
                         .target(BERLIN)
                         .zoom(14.0)
@@ -427,6 +456,8 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         if (panelOpen.value) {
             LayersPanel(
                 layersOn = layersOn,
+                version = appVersion,
+                onOpenLicenses = { licensesOpen.value = true },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 68.dp),
@@ -441,6 +472,20 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Always-on OSM credit (ODbL asks for a visible attribution on the
+            // map, not one buried in a menu). The full ODbL+CC-BY credit and the
+            // licence links live in the ☰ About panel; this line keeps the
+            // OpenStreetMap credit on screen and taps through to them.
+            Text(
+                "© OpenStreetMap",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xCCC8D0DC),
+                modifier = Modifier
+                    .background(Color(0x66000000), RoundedCornerShape(4.dp))
+                    .clickable { panelOpen.value = true }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+
             selectedCamera?.let { cam ->
                 CameraInfoCard(cam) { selectedCameraId.value = null }
             }
@@ -460,9 +505,16 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 collapsed = panelCollapsed.value,
                 onCollapsedChange = { panelCollapsed.value = it },
             )
-            // The map attribution (a licence obligation) and the project links
-            // now live in the layers panel's About section. MapLibre's own
-            // bottom-left © control keeps OSM attribution on screen regardless.
+            // The map attribution (a licence obligation), the version and the
+            // project links all live in the layers panel's About section now —
+            // the map's own bottom-left MapLibre/attribution badge is disabled.
+        }
+
+        // Opened from About. A full-bleed overlay showing the bundled licence
+        // texts; the system back button closes it rather than leaving the app.
+        if (licensesOpen.value) {
+            BackHandler { licensesOpen.value = false }
+            LicensesScreen(onClose = { licensesOpen.value = false })
         }
     }
 }
@@ -560,6 +612,8 @@ private fun SearchResultRow(
 @Composable
 private fun LayersPanel(
     layersOn: SnapshotStateMap<LayerGroup, Boolean>,
+    version: String?,
+    onOpenLicenses: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -595,24 +649,125 @@ private fun LayersPanel(
                     )
                 }
             }
-            // Credits live here, out of the way of the map: the map attribution
-            // (a licence obligation — OSM data is ODbL, the OpenMapTiles schema
-            // CC-BY, both needing a visible credit even offline) alongside the
-            // project and maintainer links. MapLibre's own bottom-left © control
-            // keeps OSM attribution on screen even when this panel is closed.
+            // Credits live here, out of the way of the map: the version, the map
+            // attribution (a licence obligation — OSM data is ODbL, the
+            // OpenMapTiles schema CC-BY, both needing a visible credit even
+            // offline), the renderer credit (MapLibre's own on-map badge is
+            // disabled — see the map setup), and the project/maintainer links.
             Text(
                 "About",
                 style = MaterialTheme.typography.labelMedium,
                 color = Color(0xFF9AA4B2),
                 modifier = Modifier.padding(top = 10.dp),
             )
+            version?.let {
+                Text(
+                    "Schattenweg v$it",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF9AA4B2),
+                )
+            }
+            // The credit lines link to their licences (ODbL / CC-BY), as both
+            // ask attribution to point at the terms.
+            LinkText(
+                "© OpenStreetMap contributors",
+                OSM_COPYRIGHT_URL,
+                Modifier.padding(top = 2.dp),
+            )
+            LinkText("© OpenMapTiles", OPENMAPTILES_URL)
+            LinkText("Rendered with MapLibre", MAPLIBRE_URL)
+            // Opens the bundled licence texts in-app (offline) rather than a URL.
             Text(
-                "© OpenMapTiles © OpenStreetMap contributors",
+                "Open-source licences",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF6E7A8A),
+                color = Color(0xFF7FD4A2),
+                modifier = Modifier.clickable { onOpenLicenses() },
             )
             LinkText("Schattenweg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
             LinkText("by phrag", MAINTAINER_URL)
+        }
+    }
+}
+
+/** A bundled licence: the display name and the asset path holding its text. */
+private val BUNDLED_LICENCES = listOf(
+    "MapLibre GL Native" to "licenses/maplibre-gl-native-BSD-2-Clause.txt",
+    "Noto Sans" to "licenses/noto-sans-OFL-1.1.txt",
+)
+
+/**
+ * Full-screen, fully offline licence view. MapLibre (BSD-2-Clause) and Noto Sans
+ * (SIL OFL 1.1) require their licence text to ship with the binary, so it is
+ * bundled in assets and shown verbatim here. The remaining dependencies use
+ * permissive licences that do not require bundling; they are catalogued in
+ * THIRD_PARTY_LICENSES.md, linked below.
+ */
+@Composable
+private fun LicensesScreen(onClose: () -> Unit) {
+    val context = LocalContext.current
+    val licences = remember {
+        BUNDLED_LICENCES.map { (name, path) ->
+            name to runCatching {
+                context.assets.open(path).bufferedReader().use { it.readText() }
+            }.getOrElse { "Licence text unavailable in this build." }
+        }
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF10141A))
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "←",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color(0xFFF2F4F8),
+                modifier = Modifier
+                    .clickable { onClose() }
+                    .padding(end = 14.dp),
+            )
+            Text(
+                "Open-source licences",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFF2F4F8),
+            )
+        }
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                "These components require their licence text to be distributed " +
+                    "with the app. Every other bundled library, crate and dataset " +
+                    "is catalogued in THIRD_PARTY_LICENSES.md.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF9AA4B2),
+            )
+            LinkText("THIRD_PARTY_LICENSES.md", THIRD_PARTY_LICENSES_URL)
+            for ((name, text) in licences) {
+                Text(
+                    name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color(0xFF7FD4A2),
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFFC8D0DC),
+                )
+            }
         }
     }
 }

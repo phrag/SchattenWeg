@@ -178,11 +178,27 @@ Both live in `MapScreen.kt`:
    Planetiler prints this requirement at the end of every tile build. Bundling
    the tiles offline does not exempt us. If the basemap is ever regenerated
    from a different schema, update the credit to match rather than dropping it.
-   This credit now lives in the layers (burger ☰) panel's **About** section,
-   next to the GitHub and "by phrag" maintainer links, rather than as a
-   standalone on-map line. Always-visible attribution is carried by MapLibre's
-   own bottom-left © / ⓘ control, which stays enabled; the About text is the
-   explicit ODbL+CC-BY credit. Do not drop either.
+   The full credit lives in the layers (burger ☰) panel's **About** section,
+   alongside the app **version**, a **"Rendered with MapLibre"** renderer
+   credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
+   and the GitHub / "by phrag" maintainer links. The "© OpenStreetMap
+   contributors" and "© OpenMapTiles" lines in About are **links** to their
+   licences (ODbL / CC-BY), as both ask attribution to point at the terms. The
+   **Open-source licences** entry opens a full-screen, fully offline view
+   (`LicensesScreen`) that shows the bundled BSD-2-Clause (MapLibre) and OFL-1.1
+   (Noto Sans) texts verbatim from `app/src/main/assets/licenses/` — those two
+   licences require their text to ship with the binary. Keep the asset files and
+   that screen in step; the rest of the dependency list lives in
+   `THIRD_PARTY_LICENSES.md`.
+
+   MapLibre's own bottom-left badge (logo + ⓘ attribution) is **disabled**
+   (`uiSettings.isLogoEnabled = false`, `isAttributionEnabled = false`) so the
+   credits aren't split between a MapLibre control and the panel. But ODbL wants
+   attribution *visible on the map*, not only in a menu — so a small always-on
+   **"© OpenStreetMap"** line sits at the top of the bottom control stack and
+   taps through to the About panel. Keep that on-map line (the ODbL affordance)
+   and the full About credit both present; if the credits move again, move the
+   version, the MapLibre credit and the licences link with them.
 
 ---
 
