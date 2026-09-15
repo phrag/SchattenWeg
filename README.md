@@ -11,6 +11,36 @@ the routing all live on your phone. Nothing you do — where you are, where you'
 going, the route you take — ever leaves the device. The app doesn't even hold
 the permission to reach the internet.
 
+<!-- Screenshots live in docs/screenshots/ — see docs/screenshots/README.md.
+     Until they're added, the images below show their captions as placeholders. -->
+<table>
+  <tr>
+    <td width="25%"><img src="docs/screenshots/01-map-cameras.png" alt="The map of central Berlin with camera dots and their coverage areas"></td>
+    <td width="25%"><img src="docs/screenshots/02-route.png" alt="A walking route steering around cameras, with the Low / Medium / High control"></td>
+    <td width="25%"><img src="docs/screenshots/03-search.png" alt="Searching for a street or place, offline"></td>
+    <td width="25%"><img src="docs/screenshots/04-layers-about.png" alt="The layers panel and About section"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Cameras &amp; their coverage</sub></td>
+    <td align="center"><sub>A route that dodges the lenses</sub></td>
+    <td align="center"><sub>Offline place search</sub></td>
+    <td align="center"><sub>Layers &amp; credits</sub></td>
+  </tr>
+</table>
+
+---
+
+## Contents
+
+- [Download &amp; install](#download--install) — get it on your phone
+- [What it does](#what-it-does)
+- [How to use it](#how-to-use-it) — a quick walkthrough
+- [Your privacy](#your-privacy)
+- [Honesty about the limits](#honesty-about-the-limits)
+- [Build from source](#build-from-source) — for developers
+- [Contributing](#contributing)
+- [Credits](#credits) &middot; [Licence](#licence)
+
 ---
 
 ## Download & install
@@ -52,6 +82,28 @@ Right now the data covers **Berlin only**.
 
 ---
 
+## How to use it
+
+Once it's installed, there's nothing to set up — open it and go:
+
+1. **See the cameras.** The map opens on Berlin. Grey pins are cameras; the
+   shaded shape around each one is the area it's modelled to watch — a wedge for
+   a camera pointing one way, a circle for one that turns or points down. Pinch
+   to zoom and drag to pan. **Tap a camera** to see its type and direction.
+2. **Pick where you're going.** Use the **search box** at the top to find a
+   street, neighbourhood or station, or just **tap the map** to drop a start
+   point and then a destination.
+3. **Get a quieter route.** Schattenweg draws a walking route that stays out of
+   camera view where it reasonably can. If a camera-free route exists, it picks
+   that one for you automatically.
+4. **Trade detour for privacy.** The **Low / Medium / High** control decides how
+   much extra walking you'll accept to avoid a lens. *Low* keeps it short;
+   *High* takes bigger detours to stay hidden. Change it and the route redraws.
+5. **Tidy the view.** The layers button (**☰**) lets you turn camera coverage,
+   labels and buildings on or off, and holds the app's credits and links.
+
+---
+
 ## Your privacy
 
 This is the whole point of the app, so it's worth being explicit.
@@ -88,6 +140,10 @@ protect against — is in **[SECURITY.md](SECURITY.md)**.
 Both of these are shown inside the app, on purpose.
 
 ---
+
+> **The rest of this page is for developers.** If you just want to use the app,
+> you're all set — grab the APK from [Releases](https://github.com/phrag/SchattenWeg/releases)
+> and go.
 
 ## Build from source
 
