@@ -259,12 +259,24 @@ remembering because none could fail a unit test:
   and never again. Overlay data is now pushed from a keyed `LaunchedEffect`;
   keep it that way.
 
-**Known perf follow-up:** the router is ready ~6 s after launch on the real
+**Known perf follow-up:** the router was ready ~6 s after launch on the real
 Berlin extract (style loads in ~80 ms by comparison) — that gap is the one-off
-exposure pass over every edge, and it is paid on every cold start. Caching the
-scored graph rather than re-deriving it is the fix; `rstar` in place of the
-grids is the smaller lever.
+exposure pass over every edge. That pass is now **cached**: `Router::open`
+(`core/src/cache.rs`) reloads the scored graph from a small binary snapshot
+next to the extract in `filesDir` instead of re-deriving it, so every cold
+start *after the first* skips the pass. The cache is only the four flat inputs
+the router is assembled from (nodes, scored edges, cameras, places); its header
+carries a format/logic `VERSION` and a fingerprint of the source extract, and
+any mismatch or malformed byte makes it fall back to the PBF. **Two levers
+remain:** the *first* launch still pays the pass — pre-generating the cache at
+build time (invoke the same code path in `build_map_assets.sh`, ship the
+snapshot, and the app could then stop bundling the `.pbf`) would kill it
+entirely; and `rstar` in place of the grids is a smaller, orthogonal win.
+**When the scoring/geometry logic changes** (`camera.rs` coverage, the
+`defaults` table, `exposure.rs` sampling), bump `cache::VERSION` so stale
+scores can't outlive the code that produced them.
 
 **Deliberately deferred:** cycling profile, location puck ("centre on me"),
-search/geocoding, camera FOV tuning against ground truth, Play Services
-fallback build.
+camera FOV tuning against ground truth, Play Services fallback build.
+(On-device place search — `Router::search_places`, `core/src/places.rs` — is
+**done** and wired into the UI, so it is no longer on this list.)

@@ -9,6 +9,7 @@
 //! graph, the camera index) lives behind a single `Router` object so the FFI
 //! never marshals the whole graph across the language boundary.
 
+mod cache;
 mod camera;
 mod exposure;
 mod osm;
@@ -77,28 +78,40 @@ impl Router {
     /// pass, then keeps the scored graph in memory. Do it off the UI thread.
     #[uniffi::constructor]
     pub fn from_pbf(pbf_path: String) -> Result<Arc<Self>, RouteError> {
-        let load = |e: osm::OsmError| RouteError::LoadFailed {
-            reason: e.to_string(),
-        };
-        let cameras = CameraIndex::new(osm::load_cameras(&pbf_path).map_err(load)?);
-        let network = osm::load_network(&pbf_path).map_err(load)?;
-        let (nodes, mut edges) = (network.nodes, network.edges);
-        let places = PlaceIndex::new(network.places);
+        Ok(Arc::new(Self::assemble(build_parts_from_pbf(&pbf_path)?)))
+    }
 
-        let coords: HashMap<u64, (f64, f64)> =
-            nodes.iter().map(|n| (n.id, (n.lat, n.lon))).collect();
+    /// Build a router, reading a cached scored graph if one is valid.
+    ///
+    /// Preferred over [`Router::from_pbf`] on device: the exposure pass over
+    /// every edge is a several-second cost otherwise paid on every cold start,
+    /// even though the bundled extract never changes. On a cache hit that pass
+    /// is skipped entirely; on a miss (no cache, a stale one, or a rebuilt
+    /// extract) it falls back to the PBF and writes a fresh cache for next
+    /// time. `cache_path` is a writable app-private location (e.g. beside the
+    /// extract in `filesDir`). A read or write failure is never fatal — the
+    /// worst case is simply the old, uncached behaviour.
+    #[uniffi::constructor]
+    pub fn open(pbf_path: String, cache_path: String) -> Result<Arc<Self>, RouteError> {
+        let fp = source_fingerprint(&pbf_path);
 
-        // The expensive part, done once: attach exposure to every edge.
-        exposure::score_edges(&mut edges, &cameras, |id| {
-            *coords.get(&id).unwrap_or(&(0.0, 0.0))
-        });
+        // Cache hit: reload the scored parts and skip the exposure pass.
+        if let Some(fp) = fp {
+            if let Ok(file) = std::fs::File::open(&cache_path) {
+                let mut reader = std::io::BufReader::new(file);
+                if let Ok(parts) = cache::read(&mut reader, fp) {
+                    return Ok(Arc::new(Self::assemble(parts)));
+                }
+            }
+        }
 
-        Ok(Arc::new(Self {
-            graph: Graph::new(nodes, edges),
-            cameras,
-            places,
-            coords,
-        }))
+        // Miss: build from the PBF, then best-effort write the cache so the
+        // next launch hits. A write failure just leaves us uncached.
+        let parts = build_parts_from_pbf(&pbf_path)?;
+        if let Some(fp) = fp {
+            write_cache(&cache_path, &parts, fp);
+        }
+        Ok(Arc::new(Self::assemble(parts)))
     }
 
     /// Plan a route. `lambda` is the paranoia dial:
@@ -156,5 +169,90 @@ impl Router {
     /// How many searchable names were found in the extract.
     pub fn place_count(&self) -> u64 {
         self.places.len() as u64
+    }
+}
+
+impl Router {
+    /// Assemble the live router from its flat parts, rebuilding every index and
+    /// grid. Shared by the PBF and cache paths so both produce an identical
+    /// router — the cache stores only these parts, never the derived indices.
+    /// Not on the UniFFI surface (it takes internal types); the constructors
+    /// above are the exported entry points.
+    fn assemble(parts: cache::Parts) -> Self {
+        let cache::Parts {
+            nodes,
+            edges,
+            cameras,
+            places,
+        } = parts;
+        let coords: HashMap<u64, (f64, f64)> =
+            nodes.iter().map(|n| (n.id, (n.lat, n.lon))).collect();
+        Self {
+            graph: Graph::new(nodes, edges),
+            cameras: CameraIndex::new(cameras),
+            places: PlaceIndex::new(places),
+            coords,
+        }
+    }
+}
+
+/// Do the ingest, graph build and the one-off exposure scoring pass, yielding
+/// the flat parts a `Router` is assembled from. This is the expensive path —
+/// the exposure pass walks every edge — and the whole point of the cache is to
+/// avoid running it on every launch. Kept free-standing so both constructors
+/// and the cache-writing path share exactly one build.
+fn build_parts_from_pbf(pbf_path: &str) -> Result<cache::Parts, RouteError> {
+    let load = |e: osm::OsmError| RouteError::LoadFailed {
+        reason: e.to_string(),
+    };
+    let cameras = osm::load_cameras(pbf_path).map_err(load)?;
+    let network = osm::load_network(pbf_path).map_err(load)?;
+    let (nodes, mut edges, places) = (network.nodes, network.edges, network.places);
+
+    let coords: HashMap<u64, (f64, f64)> = nodes.iter().map(|n| (n.id, (n.lat, n.lon))).collect();
+
+    // The expensive part, done once: attach exposure to every edge. Scored
+    // against a throwaway index so the raw camera list can be cached as-is.
+    let index = CameraIndex::new(cameras.clone());
+    exposure::score_edges(&mut edges, &index, |id| {
+        *coords.get(&id).unwrap_or(&(0.0, 0.0))
+    });
+
+    Ok(cache::Parts {
+        nodes,
+        edges,
+        cameras,
+        places,
+    })
+}
+
+/// Fingerprint of the source extract for cache validation, or `None` if it
+/// can't be stat'd (in which case caching is simply skipped). Uses file size
+/// and last-modified time — see [`cache::fingerprint`].
+fn source_fingerprint(pbf_path: &str) -> Option<u64> {
+    let meta = std::fs::metadata(pbf_path).ok()?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    Some(cache::fingerprint(meta.len(), mtime))
+}
+
+/// Best-effort cache write: to a temp file then rename, so an interrupted write
+/// never leaves a truncated file that would read back as valid-looking. Any
+/// failure is swallowed — the cache is an optimisation, never required.
+fn write_cache(cache_path: &str, parts: &cache::Parts, fingerprint: u64) {
+    let tmp = format!("{cache_path}.part");
+    let ok = (|| -> std::io::Result<()> {
+        let mut writer = std::io::BufWriter::new(std::fs::File::create(&tmp)?);
+        cache::write(&mut writer, parts, fingerprint)?;
+        writer.into_inner()?.sync_all()?;
+        std::fs::rename(&tmp, cache_path)
+    })()
+    .is_ok();
+    if !ok {
+        let _ = std::fs::remove_file(&tmp);
     }
 }
