@@ -112,6 +112,16 @@ private const val MAINTAINER_URL = "https://github.com/phrag"
 /** The renderer, credited in the About section (its on-map badge is disabled). */
 private const val MAPLIBRE_URL = "https://maplibre.org/"
 
+/** OSM's copyright/licence page — the ODbL attribution link. */
+private const val OSM_COPYRIGHT_URL = "https://www.openstreetmap.org/copyright"
+
+/** The OpenMapTiles schema (CC-BY) the basemap is generated from. */
+private const val OPENMAPTILES_URL = "https://openmaptiles.org/"
+
+/** Bundled-dependency licences (MapLibre, Noto, JNA, …), kept in the repo. */
+private const val THIRD_PARTY_LICENSES_URL =
+    "https://github.com/phrag/SchattenWeg/blob/main/THIRD_PARTY_LICENSES.md"
+
 /**
  * The one screen: a full-bleed offline map with the camera layer, the planned
  * route, and the paranoia slider pinned to the bottom.
@@ -457,6 +467,20 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Always-on OSM credit (ODbL asks for a visible attribution on the
+            // map, not one buried in a menu). The full ODbL+CC-BY credit and the
+            // licence links live in the ☰ About panel; this line keeps the
+            // OpenStreetMap credit on screen and taps through to them.
+            Text(
+                "© OpenStreetMap",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xCCC8D0DC),
+                modifier = Modifier
+                    .background(Color(0x66000000), RoundedCornerShape(4.dp))
+                    .clickable { panelOpen.value = true }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+
             selectedCamera?.let { cam ->
                 CameraInfoCard(cam) { selectedCameraId.value = null }
             }
@@ -630,13 +654,16 @@ private fun LayersPanel(
                     color = Color(0xFF9AA4B2),
                 )
             }
-            Text(
-                "© OpenMapTiles © OpenStreetMap contributors",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF6E7A8A),
-                modifier = Modifier.padding(top = 2.dp),
+            // The credit lines link to their licences (ODbL / CC-BY), as both
+            // ask attribution to point at the terms.
+            LinkText(
+                "© OpenStreetMap contributors",
+                OSM_COPYRIGHT_URL,
+                Modifier.padding(top = 2.dp),
             )
-            LinkText("Rendered with MapLibre", MAPLIBRE_URL, Modifier.padding(top = 2.dp))
+            LinkText("© OpenMapTiles", OPENMAPTILES_URL)
+            LinkText("Rendered with MapLibre", MAPLIBRE_URL)
+            LinkText("Open-source licences", THIRD_PARTY_LICENSES_URL)
             LinkText("Schattenweg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
             LinkText("by phrag", MAINTAINER_URL)
         }

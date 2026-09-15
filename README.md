@@ -294,5 +294,18 @@ ktlint -F "app/src/main/java/de/schattenweg/**/*.kt" "*.gradle.kts" "app/*.gradl
 
 ## Licence
 
-GPL-3.0-or-later. Map data © OpenStreetMap contributors, available under the
-[Open Database Licence](https://www.openstreetmap.org/copyright).
+Schattenweg is **GPL-3.0-or-later** (see [`LICENSE`](LICENSE)).
+
+Map data is **© OpenStreetMap contributors**, available under the
+[Open Database Licence (ODbL) 1.0](https://www.openstreetmap.org/copyright); the
+basemap tiles are generated from the [OpenMapTiles](https://openmaptiles.org/)
+schema (CC-BY 4.0). The bundled Berlin extract
+(`data/berlin-routing.osm.pbf`) is a **derived database** and is likewise
+offered under the ODbL — regenerate it from current OpenStreetMap data with
+[`scripts/build_map_assets.sh`](scripts/build_map_assets.sh), or take it from a
+[release](https://github.com/phrag/SchattenWeg/releases)'s attached assets.
+
+The libraries, fonts and crates bundled in the app carry their own licences,
+all compatible with the above — they're listed in
+**[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)** (also linked from the
+in-app About section).

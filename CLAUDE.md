@@ -178,16 +178,21 @@ Both live in `MapScreen.kt`:
    Planetiler prints this requirement at the end of every tile build. Bundling
    the tiles offline does not exempt us. If the basemap is ever regenerated
    from a different schema, update the credit to match rather than dropping it.
-   This credit lives in the layers (burger ☰) panel's **About** section,
+   The full credit lives in the layers (burger ☰) panel's **About** section,
    alongside the app **version**, a **"Rendered with MapLibre"** renderer
-   credit, and the GitHub / "by phrag" maintainer links. MapLibre's own
-   bottom-left badge (logo + ⓘ attribution) is **disabled** (`uiSettings
-   .isLogoEnabled = false`, `isAttributionEnabled = false` in the map setup) so
-   that all credits sit together in About rather than being split between an
-   on-map control and the panel. This means the ODbL+CC-BY credit is now reached
-   through the ☰ panel rather than shown always-on over the map — keep it
-   present and legible there; do not drop it. If the credits move again, move
-   the version and the MapLibre credit with them.
+   credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
+   and the GitHub / "by phrag" maintainer links. The "© OpenStreetMap
+   contributors" and "© OpenMapTiles" lines in About are **links** to their
+   licences (ODbL / CC-BY), as both ask attribution to point at the terms.
+
+   MapLibre's own bottom-left badge (logo + ⓘ attribution) is **disabled**
+   (`uiSettings.isLogoEnabled = false`, `isAttributionEnabled = false`) so the
+   credits aren't split between a MapLibre control and the panel. But ODbL wants
+   attribution *visible on the map*, not only in a menu — so a small always-on
+   **"© OpenStreetMap"** line sits at the top of the bottom control stack and
+   taps through to the About panel. Keep that on-map line (the ODbL affordance)
+   and the full About credit both present; if the credits move again, move the
+   version, the MapLibre credit and the licences link with them.
 
 ---
 
