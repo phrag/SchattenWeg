@@ -109,6 +109,9 @@ private const val PROJECT_URL = "https://github.com/phrag/SchattenWeg"
 /** The maintainer's GitHub profile, shown as "by phrag" in the About section. */
 private const val MAINTAINER_URL = "https://github.com/phrag"
 
+/** The renderer, credited in the About section (its on-map badge is disabled). */
+private const val MAPLIBRE_URL = "https://maplibre.org/"
+
 /**
  * The one screen: a full-bleed offline map with the camera layer, the planned
  * route, and the paranoia slider pinned to the bottom.
@@ -118,6 +121,13 @@ private const val MAINTAINER_URL = "https://github.com/phrag"
 @Composable
 fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val context = LocalContext.current
+    // Shown in the About section. Read from the installed package so it always
+    // matches the actual APK; null (and so hidden) only if the lookup fails.
+    val appVersion = remember(context) {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull()
+    }
     val state by viewModel.state.collectAsState()
     val level by viewModel.level.collectAsState()
     val cameras by viewModel.cameras.collectAsState()
@@ -331,6 +341,11 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 )
                 mapView.getMapAsync { map ->
                     mapRef.value = map
+                    // The renderer's own bottom-left badge (MapLibre logo + the
+                    // ⓘ attribution button) is turned off; that credit now lives
+                    // in the layers panel's About section instead.
+                    map.uiSettings.isLogoEnabled = false
+                    map.uiSettings.isAttributionEnabled = false
                     map.cameraPosition = CameraPosition.Builder()
                         .target(BERLIN)
                         .zoom(14.0)
@@ -427,6 +442,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         if (panelOpen.value) {
             LayersPanel(
                 layersOn = layersOn,
+                version = appVersion,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 68.dp),
@@ -460,9 +476,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 collapsed = panelCollapsed.value,
                 onCollapsedChange = { panelCollapsed.value = it },
             )
-            // The map attribution (a licence obligation) and the project links
-            // now live in the layers panel's About section. MapLibre's own
-            // bottom-left © control keeps OSM attribution on screen regardless.
+            // The map attribution (a licence obligation), the version and the
+            // project links all live in the layers panel's About section now —
+            // the map's own bottom-left MapLibre/attribution badge is disabled.
         }
     }
 }
@@ -560,6 +576,7 @@ private fun SearchResultRow(
 @Composable
 private fun LayersPanel(
     layersOn: SnapshotStateMap<LayerGroup, Boolean>,
+    version: String?,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -595,22 +612,31 @@ private fun LayersPanel(
                     )
                 }
             }
-            // Credits live here, out of the way of the map: the map attribution
-            // (a licence obligation — OSM data is ODbL, the OpenMapTiles schema
-            // CC-BY, both needing a visible credit even offline) alongside the
-            // project and maintainer links. MapLibre's own bottom-left © control
-            // keeps OSM attribution on screen even when this panel is closed.
+            // Credits live here, out of the way of the map: the version, the map
+            // attribution (a licence obligation — OSM data is ODbL, the
+            // OpenMapTiles schema CC-BY, both needing a visible credit even
+            // offline), the renderer credit (MapLibre's own on-map badge is
+            // disabled — see the map setup), and the project/maintainer links.
             Text(
                 "About",
                 style = MaterialTheme.typography.labelMedium,
                 color = Color(0xFF9AA4B2),
                 modifier = Modifier.padding(top = 10.dp),
             )
+            version?.let {
+                Text(
+                    "Schattenweg v$it",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF9AA4B2),
+                )
+            }
             Text(
                 "© OpenMapTiles © OpenStreetMap contributors",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xFF6E7A8A),
+                modifier = Modifier.padding(top = 2.dp),
             )
+            LinkText("Rendered with MapLibre", MAPLIBRE_URL, Modifier.padding(top = 2.dp))
             LinkText("Schattenweg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
             LinkText("by phrag", MAINTAINER_URL)
         }

@@ -178,11 +178,16 @@ Both live in `MapScreen.kt`:
    Planetiler prints this requirement at the end of every tile build. Bundling
    the tiles offline does not exempt us. If the basemap is ever regenerated
    from a different schema, update the credit to match rather than dropping it.
-   This credit now lives in the layers (burger ☰) panel's **About** section,
-   next to the GitHub and "by phrag" maintainer links, rather than as a
-   standalone on-map line. Always-visible attribution is carried by MapLibre's
-   own bottom-left © / ⓘ control, which stays enabled; the About text is the
-   explicit ODbL+CC-BY credit. Do not drop either.
+   This credit lives in the layers (burger ☰) panel's **About** section,
+   alongside the app **version**, a **"Rendered with MapLibre"** renderer
+   credit, and the GitHub / "by phrag" maintainer links. MapLibre's own
+   bottom-left badge (logo + ⓘ attribution) is **disabled** (`uiSettings
+   .isLogoEnabled = false`, `isAttributionEnabled = false` in the map setup) so
+   that all credits sit together in About rather than being split between an
+   on-map control and the panel. This means the ODbL+CC-BY credit is now reached
+   through the ☰ panel rather than shown always-on over the map — keep it
+   present and legible there; do not drop it. If the credits move again, move
+   the version and the MapLibre credit with them.
 
 ---
 
