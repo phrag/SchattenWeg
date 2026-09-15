@@ -56,6 +56,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - uses: android-actions/setup-android@v3
+        with:
+          # Default is "tools platform-tools", but the legacy "tools" package
+          # was removed from cmdline-tools and now fails ("Failed to find
+          # package 'tools'"). We only need platform-tools; the NDK, build-tools
+          # and platform are installed below / fetched by Gradle on demand.
+          packages: platform-tools
 
       # Keep in step with ndkVersion in app/build.gradle.kts.
       - name: Install NDK
