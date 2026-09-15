@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.RectF
 import android.net.Uri
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -162,6 +164,8 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         mutableStateMapOf(*LayerGroup.entries.map { it to true }.toTypedArray())
     }
     val panelOpen = remember { mutableStateOf(false) }
+    // The full-screen open-source-licences view (BSD/OFL texts bundled offline).
+    val licensesOpen = remember { mutableStateOf(false) }
     // The avoidance panel starts open (so the honesty notes are seen) but can
     // be slid shut to uncover the map.
     val panelCollapsed = remember { mutableStateOf(false) }
@@ -453,6 +457,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             LayersPanel(
                 layersOn = layersOn,
                 version = appVersion,
+                onOpenLicenses = { licensesOpen.value = true },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 68.dp),
@@ -503,6 +508,13 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             // The map attribution (a licence obligation), the version and the
             // project links all live in the layers panel's About section now —
             // the map's own bottom-left MapLibre/attribution badge is disabled.
+        }
+
+        // Opened from About. A full-bleed overlay showing the bundled licence
+        // texts; the system back button closes it rather than leaving the app.
+        if (licensesOpen.value) {
+            BackHandler { licensesOpen.value = false }
+            LicensesScreen(onClose = { licensesOpen.value = false })
         }
     }
 }
@@ -601,6 +613,7 @@ private fun SearchResultRow(
 private fun LayersPanel(
     layersOn: SnapshotStateMap<LayerGroup, Boolean>,
     version: String?,
+    onOpenLicenses: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -663,9 +676,98 @@ private fun LayersPanel(
             )
             LinkText("© OpenMapTiles", OPENMAPTILES_URL)
             LinkText("Rendered with MapLibre", MAPLIBRE_URL)
-            LinkText("Open-source licences", THIRD_PARTY_LICENSES_URL)
+            // Opens the bundled licence texts in-app (offline) rather than a URL.
+            Text(
+                "Open-source licences",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF7FD4A2),
+                modifier = Modifier.clickable { onOpenLicenses() },
+            )
             LinkText("Schattenweg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
             LinkText("by phrag", MAINTAINER_URL)
+        }
+    }
+}
+
+/** A bundled licence: the display name and the asset path holding its text. */
+private val BUNDLED_LICENCES = listOf(
+    "MapLibre GL Native" to "licenses/maplibre-gl-native-BSD-2-Clause.txt",
+    "Noto Sans" to "licenses/noto-sans-OFL-1.1.txt",
+)
+
+/**
+ * Full-screen, fully offline licence view. MapLibre (BSD-2-Clause) and Noto Sans
+ * (SIL OFL 1.1) require their licence text to ship with the binary, so it is
+ * bundled in assets and shown verbatim here. The remaining dependencies use
+ * permissive licences that do not require bundling; they are catalogued in
+ * THIRD_PARTY_LICENSES.md, linked below.
+ */
+@Composable
+private fun LicensesScreen(onClose: () -> Unit) {
+    val context = LocalContext.current
+    val licences = remember {
+        BUNDLED_LICENCES.map { (name, path) ->
+            name to runCatching {
+                context.assets.open(path).bufferedReader().use { it.readText() }
+            }.getOrElse { "Licence text unavailable in this build." }
+        }
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xFF10141A))
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "←",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color(0xFFF2F4F8),
+                modifier = Modifier
+                    .clickable { onClose() }
+                    .padding(end = 14.dp),
+            )
+            Text(
+                "Open-source licences",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFF2F4F8),
+            )
+        }
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                "These components require their licence text to be distributed " +
+                    "with the app. Every other bundled library, crate and dataset " +
+                    "is catalogued in THIRD_PARTY_LICENSES.md.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF9AA4B2),
+            )
+            LinkText("THIRD_PARTY_LICENSES.md", THIRD_PARTY_LICENSES_URL)
+            for ((name, text) in licences) {
+                Text(
+                    name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color(0xFF7FD4A2),
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFFC8D0DC),
+                )
+            }
         }
     }
 }

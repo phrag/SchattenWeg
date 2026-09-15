@@ -6,7 +6,11 @@ upstream project, where the full licence text lives; the licences are all
 compatible with distributing Schattenweg under the GPL.
 
 The **in-app About section** (☰ → About) links here, and to the OpenStreetMap
-and OpenMapTiles licences directly.
+and OpenMapTiles licences directly. The two licences that require their text to
+be distributed with the binary — **MapLibre GL Native (BSD-2-Clause)** and
+**Noto Sans (SIL OFL 1.1)** — are bundled in the app and shown verbatim, fully
+offline, on the **Open-source licences** screen (☰ → About → Open-source
+licences).
 
 ## Bundled in the APK — code
 

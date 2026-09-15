@@ -183,7 +183,13 @@ Both live in `MapScreen.kt`:
    credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
    and the GitHub / "by phrag" maintainer links. The "© OpenStreetMap
    contributors" and "© OpenMapTiles" lines in About are **links** to their
-   licences (ODbL / CC-BY), as both ask attribution to point at the terms.
+   licences (ODbL / CC-BY), as both ask attribution to point at the terms. The
+   **Open-source licences** entry opens a full-screen, fully offline view
+   (`LicensesScreen`) that shows the bundled BSD-2-Clause (MapLibre) and OFL-1.1
+   (Noto Sans) texts verbatim from `app/src/main/assets/licenses/` — those two
+   licences require their text to ship with the binary. Keep the asset files and
+   that screen in step; the rest of the dependency list lives in
+   `THIRD_PARTY_LICENSES.md`.
 
    MapLibre's own bottom-left badge (logo + ⓘ attribution) is **disabled**
    (`uiSettings.isLogoEnabled = false`, `isAttributionEnabled = false`) so the
