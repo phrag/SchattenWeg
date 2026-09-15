@@ -143,6 +143,28 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
             "Could not load the map data: $reason"
     }
 
+    /**
+     * Undo the most recently dropped point: the destination first (leaving just
+     * the start), then the start. Bound to a long-press on empty map — a
+     * deliberate gesture, so it won't fire from stray taps — and a no-op when
+     * nothing is dropped. Clearing the destination also drops the planned route
+     * and returns to the Ready state.
+     */
+    fun clearLastPoint() {
+        when {
+            end.value != null -> {
+                end.value = null
+                route.value = null
+                _state.value = UiState.Ready(router?.cameraCount() ?: 0uL)
+            }
+
+            start.value != null -> {
+                start.value = null
+                _state.value = UiState.Ready(router?.cameraCount() ?: 0uL)
+            }
+        }
+    }
+
     /** Handle a map tap: first sets the start, second the destination. */
     fun onMapTap(point: LatLon) {
         if (start.value == null || end.value != null) {

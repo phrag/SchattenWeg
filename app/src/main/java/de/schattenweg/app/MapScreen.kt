@@ -129,7 +129,8 @@ private const val THIRD_PARTY_LICENSES_URL =
  * route, and the paranoia slider pinned to the bottom.
  *
  * Tap once to drop a start, twice to plan; a third tap starts over.
- * Long-press a camera to see its details (single taps always route).
+ * Long-press a camera to see its details, or empty map to undo the last
+ * dropped point (single taps always route).
  */
 @Composable
 fun MapScreen(viewModel: RouteViewModel = viewModel()) {
@@ -380,11 +381,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         true
                     }
 
-                    // Camera info is the secondary, informational gesture:
-                    // long-press a camera to ask about it. Hit-test with a
-                    // finger-sized box, not the exact pixel. A long-press that
-                    // hits nothing does nothing — it never drops a waypoint — so
-                    // the two gestures can't collide.
+                    // Long-press is the secondary gesture, split by target:
+                    // on a camera it opens the info card; on empty map it
+                    // undoes the last dropped routing point. Hit-test with a
+                    // finger-sized box, not the exact pixel. Either way it never
+                    // drops a waypoint, so it can't collide with single-tap
+                    // routing.
                     map.addOnMapLongClickListener { point ->
                         val at = map.projection.toScreenLocation(point)
                         val touch = RectF(at.x - 28f, at.y - 28f, at.x + 28f, at.y + 28f)
@@ -395,6 +397,10 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         if (hit != null) {
                             Log.d(TAG, "Camera long-pressed: osm id $hit")
                             selectedCameraId.value = hit
+                        } else {
+                            Log.d(TAG, "Long-press on empty map: undo last point")
+                            selectedCameraId.value = null
+                            viewModel.clearLastPoint()
                         }
                         true
                     }
