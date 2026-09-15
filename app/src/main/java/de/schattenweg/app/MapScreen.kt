@@ -129,6 +129,8 @@ private const val THIRD_PARTY_LICENSES_URL =
  * route, and the paranoia slider pinned to the bottom.
  *
  * Tap once to drop a start, twice to plan; a third tap starts over.
+ * Long-press a camera to see its details, or empty map to undo the last
+ * dropped point (single taps always route).
  */
 @Composable
 fun MapScreen(viewModel: RouteViewModel = viewModel()) {
@@ -365,10 +367,27 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         .zoom(14.0)
                         .build()
 
+                    // A single tap always routes — it drops the start, then the
+                    // destination. It is deliberately never hijacked into
+                    // opening camera info: Berlin is camera-dense (hundreds
+                    // within the viewport), so a finger-sized hit-box around a
+                    // camera would swallow taps across much of the map, exactly
+                    // where routing matters most. Any open camera card is closed
+                    // so the tap reads purely as a routing action.
                     map.addOnMapClickListener { point ->
-                        // A tap on a camera asks about it; a tap on the map
-                        // routes. Hit-test with a finger-sized box, not the
-                        // exact pixel.
+                        Log.d(TAG, "Map tapped at ${point.latitude},${point.longitude}")
+                        selectedCameraId.value = null
+                        viewModel.onMapTap(LatLon(point.latitude, point.longitude))
+                        true
+                    }
+
+                    // Long-press is the secondary gesture, split by target:
+                    // on a camera it opens the info card; on empty map it
+                    // undoes the last dropped routing point. Hit-test with a
+                    // finger-sized box, not the exact pixel. Either way it never
+                    // drops a waypoint, so it can't collide with single-tap
+                    // routing.
+                    map.addOnMapLongClickListener { point ->
                         val at = map.projection.toScreenLocation(point)
                         val touch = RectF(at.x - 28f, at.y - 28f, at.x + 28f, at.y + 28f)
                         val hit = map.queryRenderedFeatures(touch, CAMERA_LAYER)
@@ -376,12 +395,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                             ?.getNumberProperty("osm_id")
                             ?.toLong()
                         if (hit != null) {
-                            Log.d(TAG, "Camera tapped: osm id $hit")
+                            Log.d(TAG, "Camera long-pressed: osm id $hit")
                             selectedCameraId.value = hit
                         } else {
-                            Log.d(TAG, "Map tapped at ${point.latitude},${point.longitude}")
+                            Log.d(TAG, "Long-press on empty map: undo last point")
                             selectedCameraId.value = null
-                            viewModel.onMapTap(LatLon(point.latitude, point.longitude))
+                            viewModel.clearLastPoint()
                         }
                         true
                     }
@@ -988,7 +1007,8 @@ private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modif
         is RouteViewModel.UiState.Loading -> "Loading Berlin surveillance map…"
 
         is RouteViewModel.UiState.Ready ->
-            "${state.cameraCount} mapped cameras. Tap a start, then a destination."
+            "${state.cameraCount} mapped cameras. Tap a start, then a destination. " +
+                "Long-press a camera for details."
 
         is RouteViewModel.UiState.Planning -> "Planning the quiet way…"
 
