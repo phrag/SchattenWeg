@@ -129,6 +129,7 @@ private const val THIRD_PARTY_LICENSES_URL =
  * route, and the paranoia slider pinned to the bottom.
  *
  * Tap once to drop a start, twice to plan; a third tap starts over.
+ * Long-press a camera to see its details (tapping it would clash with routing).
  */
 @Composable
 fun MapScreen(viewModel: RouteViewModel = viewModel()) {
@@ -366,9 +367,23 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         .build()
 
                     map.addOnMapClickListener { point ->
-                        // A tap on a camera asks about it; a tap on the map
-                        // routes. Hit-test with a finger-sized box, not the
-                        // exact pixel.
+                        // A tap always routes (drop a start, then a
+                        // destination). Camera info is a long-press instead —
+                        // see the long-click listener below. Berlin is dense
+                        // with cameras, so if a tap near one opened its card
+                        // it would routinely hijack routing; keeping the tap
+                        // unconditional makes routing reliable everywhere.
+                        Log.d(TAG, "Map tapped at ${point.latitude},${point.longitude}")
+                        selectedCameraId.value = null
+                        viewModel.onMapTap(LatLon(point.latitude, point.longitude))
+                        true
+                    }
+
+                    map.addOnMapLongClickListener { point ->
+                        // A long-press inspects a camera. Hit-test with a
+                        // finger-sized box, not the exact pixel. A press that
+                        // misses every camera is ignored (returns false), so it
+                        // never drops a routing point by surprise.
                         val at = map.projection.toScreenLocation(point)
                         val touch = RectF(at.x - 28f, at.y - 28f, at.x + 28f, at.y + 28f)
                         val hit = map.queryRenderedFeatures(touch, CAMERA_LAYER)
@@ -376,14 +391,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                             ?.getNumberProperty("osm_id")
                             ?.toLong()
                         if (hit != null) {
-                            Log.d(TAG, "Camera tapped: osm id $hit")
+                            Log.d(TAG, "Camera long-pressed: osm id $hit")
                             selectedCameraId.value = hit
+                            true
                         } else {
-                            Log.d(TAG, "Map tapped at ${point.latitude},${point.longitude}")
-                            selectedCameraId.value = null
-                            viewModel.onMapTap(LatLon(point.latitude, point.longitude))
+                            false
                         }
-                        true
                     }
 
                     map.addOnCameraIdleListener {
@@ -818,6 +831,12 @@ private fun AvoidancePanel(
                         color = Color(0xFFF2F4F8),
                     )
                     AvoidanceSelector(selected = level, onSelect = onSelect)
+                    Text(
+                        "Tap the map to set start and destination. " +
+                            "Long-press a camera for its details.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF9AA4B2),
+                    )
                     Text(
                         "Only cameras mapped in OpenStreetMap — real coverage is " +
                             "higher. Avoiding them is not anonymity.",
