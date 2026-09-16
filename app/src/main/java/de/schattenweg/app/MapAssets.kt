@@ -20,6 +20,13 @@ object MapAssets {
     data class Provisioned(
         /** Berlin routing snapshot for the Rust core, or null if not bundled. */
         val routingPbf: File?,
+        /**
+         * Where the core caches the exposure-scored graph. Not a bundled
+         * asset: the first launch derives it from [routingPbf] and writes it
+         * here (in the same private dir), so later launches skip the several-
+         * second scoring pass. Null when there is no snapshot to score.
+         */
+        val routingCache: File?,
         /** Offline basemap tiles, or null if not bundled. */
         val pmtiles: File?,
         /** Directory holding the label glyph tree, or null if not bundled. */
@@ -28,14 +35,19 @@ object MapAssets {
 
     private const val ASSET_DIR = "map"
     private const val ROUTING_ASSET = "berlin-routing.osm.pbf"
+
+    /** Core-written cache of the scored graph; see [Provisioned.routingCache]. */
+    private const val ROUTING_CACHE = "berlin-routing.graphcache"
     private const val TILES_ASSET = "berlin.pmtiles"
     private const val GLYPHS_ASSET = "glyphs"
 
     fun ensure(context: Context): Provisioned {
         val bundled = context.assets.list(ASSET_DIR)?.toSet() ?: emptySet()
         val outDir = File(context.filesDir, "map").apply { mkdirs() }
+        val routingPbf = copyIfBundled(context, bundled, ROUTING_ASSET, outDir)
         return Provisioned(
-            routingPbf = copyIfBundled(context, bundled, ROUTING_ASSET, outDir),
+            routingPbf = routingPbf,
+            routingCache = routingPbf?.let { File(outDir, ROUTING_CACHE) },
             pmtiles = copyIfBundled(context, bundled, TILES_ASSET, outDir),
             glyphsDir = if (GLYPHS_ASSET in bundled) {
                 copyTree(context, "$ASSET_DIR/$GLYPHS_ASSET", File(outDir, GLYPHS_ASSET))

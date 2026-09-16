@@ -124,3 +124,89 @@ fn does_not_index_arbitrary_pois() {
     let router = Router::from_pbf(fixture()).expect("fixture should load");
     assert!(router.search_places("cafe".to_string(), 5).is_empty());
 }
+
+/// A per-test scratch cache path that is cleaned up on drop, so a failing test
+/// never leaves a file behind to poison the next run.
+struct TempCache(std::path::PathBuf);
+impl TempCache {
+    fn new(tag: &str) -> Self {
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "schattenweg-cache-test-{tag}-{}.bin",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&p);
+        Self(p)
+    }
+    fn path(&self) -> String {
+        self.0.to_string_lossy().into_owned()
+    }
+}
+impl Drop for TempCache {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+#[test]
+fn open_writes_a_cache_then_reads_it_back_identically() {
+    let cache = TempCache::new("roundtrip");
+
+    // First open: cache miss, builds from the PBF and writes the cache.
+    let fresh = Router::open(fixture(), cache.path()).expect("first open builds");
+    assert!(
+        std::path::Path::new(&cache.path()).exists(),
+        "open should have written a cache file"
+    );
+
+    // Second open: cache hit, must yield an identical router.
+    let cached = Router::open(fixture(), cache.path()).expect("second open reads cache");
+
+    assert_eq!(fresh.camera_count(), cached.camera_count());
+    assert_eq!(fresh.place_count(), cached.place_count());
+
+    let start = LatLon {
+        lat: 52.5200,
+        lon: 13.4000,
+    };
+    let end = LatLon {
+        lat: 52.5200,
+        lon: 13.4040,
+    };
+    for lambda in [0.0, 8.0] {
+        let a = fresh.plan(start, end, lambda).expect("fresh route");
+        let b = cached.plan(start, end, lambda).expect("cached route");
+        assert_eq!(a.length_m, b.length_m, "length differs at λ={lambda}");
+        assert_eq!(
+            a.mean_exposure, b.mean_exposure,
+            "exposure differs at λ={lambda}"
+        );
+        assert_eq!(
+            a.polyline.len(),
+            b.polyline.len(),
+            "path differs at λ={lambda}"
+        );
+    }
+}
+
+#[test]
+fn open_matches_from_pbf() {
+    let cache = TempCache::new("matches-pbf");
+    let direct = Router::from_pbf(fixture()).expect("from_pbf");
+    let opened = Router::open(fixture(), cache.path()).expect("open");
+    assert_eq!(direct.camera_count(), opened.camera_count());
+    assert_eq!(direct.place_count(), opened.place_count());
+}
+
+#[test]
+fn open_falls_back_when_cache_is_corrupt() {
+    let cache = TempCache::new("corrupt");
+    // A garbage file where the cache should be: open must ignore it, rebuild
+    // from the PBF, and overwrite it with a valid cache.
+    std::fs::write(&cache.0, b"not a real cache").expect("seed corrupt file");
+    let router = Router::open(fixture(), cache.path()).expect("open recovers from junk");
+    assert_eq!(router.camera_count(), 2);
+    // The corrupt file was replaced, so a second open now hits the cache.
+    let again = Router::open(fixture(), cache.path()).expect("second open");
+    assert_eq!(again.camera_count(), 2);
+}

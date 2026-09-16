@@ -102,7 +102,14 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _state.value = try {
-                val r = withContext(Dispatchers.Default) { Router.fromPbf(pbf.absolutePath) }
+                // open() reuses a cached scored graph when one is valid,
+                // skipping the several-second exposure pass on every cold start
+                // after the first. The cache lives beside the snapshot in
+                // private storage; on a miss the core rebuilds and rewrites it.
+                val cachePath = assets.routingCache!!.absolutePath
+                val r = withContext(Dispatchers.Default) {
+                    Router.open(pbf.absolutePath, cachePath)
+                }
                 router = r
                 // The map almost certainly asked for cameras while this was
                 // still loading; answer that request now.
