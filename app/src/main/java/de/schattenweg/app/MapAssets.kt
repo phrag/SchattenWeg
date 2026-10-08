@@ -50,7 +50,8 @@ object MapAssets {
             // Prefer the cache pre-built by build_map_assets.sh; absent that,
             // the path is still returned so the core can write its own.
             routingCache = routingPbf?.let {
-                copyIfBundled(context, bundled, ROUTING_CACHE, outDir) ?: File(outDir, ROUTING_CACHE)
+                copyIfBundled(context, bundled, ROUTING_CACHE, outDir)
+                    ?: File(outDir, ROUTING_CACHE)
             },
             pmtiles = copyIfBundled(context, bundled, TILES_ASSET, outDir),
             glyphsDir = if (GLYPHS_ASSET in bundled) {
