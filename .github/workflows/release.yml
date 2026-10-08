@@ -5,7 +5,9 @@ name: Release
 # MapScreen.kt's ProjectLink). Three shapes of release:
 #
 #   * push to main  -> a rolling "latest" pre-release, retagged to the new
-#                      commit, so the newest build is always downloadable
+#                      commit, so the newest build is always downloadable at
+#                      the stable URL linked from the README:
+#                      /releases/download/latest/schattenweg-latest-debug.apk
 #   * push a v* tag -> a permanent, versioned release for that tag
 #   * manual run    -> a throwaway build-<run> pre-release
 #
@@ -154,11 +156,15 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             tag="$GITHUB_REF_NAME"; prerelease=false; title="$GITHUB_REF_NAME"; label="$GITHUB_REF_NAME"
           elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            tag="latest"; prerelease=true; title="Latest build (main@$short_sha)"; label="main-$short_sha"
+            tag="latest"; prerelease=true; title="Latest build (main@$short_sha)"; label="latest"
           else
             tag="build-$GITHUB_RUN_NUMBER"; prerelease=true; title="build-$GITHUB_RUN_NUMBER"; label="build-$GITHUB_RUN_NUMBER"
           fi
 
+          # The rolling build's asset name must NOT contain the commit: the
+          # README links straight to
+          #   releases/download/latest/schattenweg-latest-debug.apk
+          # and that URL only stays valid if the name never changes.
           apk="schattenweg-${label}-debug.apk"
           cp "$(ls app/build/outputs/apk/debug/*.apk | head -n1)" "$apk"
 
