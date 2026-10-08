@@ -68,11 +68,15 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
+import uniffi.schattenweg_core.AiZone
 import uniffi.schattenweg_core.Camera
 import uniffi.schattenweg_core.CameraKind
 import uniffi.schattenweg_core.LatLon
 import uniffi.schattenweg_core.Place
 import uniffi.schattenweg_core.PlaceKind
+import uniffi.schattenweg_core.ZoneStatus
+import uniffi.schattenweg_core.aiZones
+import uniffi.schattenweg_core.aiZonesAsOf
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -103,12 +107,24 @@ private const val CAMERA_LAYER = "sw-camera-dots"
 private const val ROUTE_SOURCE = "sw-route"
 
 /**
- * Police AI-video zones (see AiZones.kt). Static data, so it is handed to the
- * source at style-load time rather than pushed from a LaunchedEffect.
+ * Police AI-video zones. Static data, so it is handed to the source at
+ * style-load time rather than pushed from a LaunchedEffect.
  */
 private const val AI_ZONE_SOURCE = "sw-ai-zones"
 private const val AI_ZONE_FILL = "sw-ai-zones-fill"
 private const val AI_ZONE_LINE = "sw-ai-zones-line"
+
+/**
+ * The zones come from the Rust core -- the same table its exposure pass scores
+ * routes against -- so what is drawn cannot disagree with what is avoided.
+ * Lazy: the native library loads on first use, not at class init.
+ */
+private val AI_ZONES: List<AiZone> by lazy { aiZones() }
+
+private fun ZoneStatus.label() = when (this) {
+    ZoneStatus.COMMISSIONING -> "Being set up"
+    ZoneStatus.PLANNED -> "Planned"
+}
 private const val ENDPOINT_SOURCE = "sw-endpoints"
 
 /** Berlin, Alexanderplatz — where the map opens. */
@@ -891,7 +907,8 @@ private fun AvoidancePanel(
                     AvoidanceSelector(selected = level, onSelect = onSelect)
                     Text(
                         "Only cameras mapped in OpenStreetMap — real coverage is " +
-                            "higher. Avoiding them is not anonymity.",
+                            "higher. Police AI-video zones (purple) are approximate " +
+                            "circles, also avoided. Avoiding them is not anonymity.",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF9AA4B2),
                     )
@@ -1056,7 +1073,8 @@ private fun CameraInfoCard(camera: Camera, onDismiss: () -> Unit) {
 /**
  * What is known about one AI-video zone. The wording is careful on purpose:
  * the circle is ours, the boundary is not published, and a zone says nothing
- * about how many lenses are in it.
+ * about how many lenses are in it -- routing treats it as watched ground all
+ * the same.
  */
 @Composable
 private fun AiZoneInfoCard(zone: AiZone, onDismiss: () -> Unit) {
@@ -1069,7 +1087,7 @@ private fun AiZoneInfoCard(zone: AiZone, onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                "${zone.name} \u2014 ${zone.status.label}",
+                "${zone.name} \u2014 ${zone.status.label()}",
                 style = MaterialTheme.typography.titleSmall,
                 color = Color(0xFFF2F4F8),
             )
@@ -1086,7 +1104,7 @@ private fun AiZoneInfoCard(zone: AiZone, onDismiss: () -> Unit) {
             Text(
                 "Not facial recognition, per the police. The circle is an " +
                     "approximation: no boundary or camera positions are published. " +
-                    "Not used for routing. Checked $AI_ZONES_AS_OF.",
+                    "Routes treat it as watched ground. Checked ${aiZonesAsOf()}.",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xFF9AA4B2),
             )

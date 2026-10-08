@@ -35,7 +35,7 @@ const MAGIC: &[u8; 4] = b"SWGC";
 /// sampling in `exposure.rs`). The cached edge exposures are only as current as
 /// the code that wrote them; bumping the version invalidates every old cache so
 /// a stale score can never outlive the logic that produced it.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 /// The four flat vectors a `Router` is assembled from. This is exactly what the
 /// PBF ingest produces (with edges already scored) and exactly what the cache

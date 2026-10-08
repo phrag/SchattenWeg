@@ -7,11 +7,13 @@
 //! paranoia parameter λ (see `routing.rs`).
 //!
 //! The score is computed by walking each edge in small steps and asking, at
-//! each sample point, whether any nearby camera covers it. Cameras are held in
-//! a spatial index so "nearby" is cheap; the naive all-pairs version is left
-//! in a comment for clarity.
+//! each sample point, whether it is watched: covered by a nearby camera, or
+//! inside a police AI-video zone (see `zones.rs`). Cameras are held in a
+//! spatial index so "nearby" is cheap; the naive all-pairs version is left in
+//! a comment for clarity.
 
 use crate::camera::{haversine_m, Camera};
+use crate::zones::ZoneIndex;
 use std::collections::HashMap;
 
 /// A node in the routing graph — just a coordinate plus its stable id.
@@ -44,24 +46,29 @@ const SAMPLE_STEP_M: f64 = 5.0;
 /// at full resolution — far longer than any real OSM street segment.
 const MAX_SAMPLES: usize = 2_000;
 
-/// Compute and attach an exposure score to every edge, given the node table
-/// and the camera set. Mutates `edges` in place.
+/// Compute and attach an exposure score to every edge, given the node table,
+/// the camera set and the AI-video zones. Mutates `edges` in place.
 ///
 /// `nodes_lookup` must resolve a node id to its coordinates. In the real graph
 /// this is a slice indexed by a compact id; here we take a closure so the
 /// scoring logic stays independent of graph storage.
-pub fn score_edges<F>(edges: &mut [Edge], cameras: &CameraIndex, mut node_coord: F)
-where
+pub fn score_edges<F>(
+    edges: &mut [Edge],
+    cameras: &CameraIndex,
+    zones: &ZoneIndex,
+    mut node_coord: F,
+) where
     F: FnMut(u64) -> (f64, f64),
 {
     for edge in edges.iter_mut() {
         let (alat, alon) = node_coord(edge.from);
         let (blat, blon) = node_coord(edge.to);
-        edge.exposure = edge_exposure(alat, alon, blat, blon, edge.length_m, cameras);
+        edge.exposure = edge_exposure(alat, alon, blat, blon, edge.length_m, cameras, zones);
     }
 }
 
-/// Fraction of the A→B segment that lies inside any camera's coverage.
+/// Fraction of the A→B segment that lies inside any camera's coverage or any
+/// AI-video zone.
 fn edge_exposure(
     alat: f64,
     alon: f64,
@@ -69,6 +76,7 @@ fn edge_exposure(
     blon: f64,
     length_m: f64,
     cameras: &CameraIndex,
+    zones: &ZoneIndex,
 ) -> f64 {
     // NaN (from malformed coordinates) fails this test and is treated as
     // zero-length, same as a degenerate edge.
@@ -88,7 +96,7 @@ fn edge_exposure(
         // Linear interpolation in lat/lon is fine over a single OSM edge.
         let lat = alat + (blat - alat) * t;
         let lon = alon + (blon - alon) * t;
-        if cameras.any_covers(lat, lon) {
+        if cameras.any_covers(lat, lon) || zones.contains(lat, lon) {
             covered += 1;
         }
     }
@@ -206,7 +214,7 @@ mod tests {
     #[test]
     fn edge_far_from_cameras_scores_zero() {
         let idx = CameraIndex::new(vec![dome_at(52.60, 13.50, 20.0)]);
-        let e = edge_exposure(52.52, 13.40, 52.52, 13.41, 700.0, &idx);
+        let e = edge_exposure(52.52, 13.40, 52.52, 13.41, 700.0, &idx, &ZoneIndex::empty());
         assert_eq!(e, 0.0);
     }
 
@@ -215,7 +223,15 @@ mod tests {
         // A corrupt extract could claim a single edge spans the planet. The
         // sample count must stay capped instead of looping for minutes.
         let idx = CameraIndex::new(vec![dome_at(52.52, 13.40, 25.0)]);
-        let e = edge_exposure(52.52, 13.40, -33.9, 151.2, 16_000_000.0, &idx);
+        let e = edge_exposure(
+            52.52,
+            13.40,
+            -33.9,
+            151.2,
+            16_000_000.0,
+            &idx,
+            &ZoneIndex::empty(),
+        );
         assert!((0.0..=1.0).contains(&e));
     }
 
@@ -244,7 +260,68 @@ mod tests {
     fn edge_through_camera_scores_positive() {
         // Camera sitting right on the midpoint of a short edge.
         let idx = CameraIndex::new(vec![dome_at(52.5200, 13.4050, 30.0)]);
-        let e = edge_exposure(52.5195, 13.4050, 52.5205, 13.4050, 111.0, &idx);
+        let e = edge_exposure(
+            52.5195,
+            13.4050,
+            52.5205,
+            13.4050,
+            111.0,
+            &idx,
+            &ZoneIndex::empty(),
+        );
         assert!(e > 0.0 && e <= 1.0);
+    }
+
+    /// A one-zone index centred on a made-up point, radius 100 m.
+    fn zone_100m(lat: f64, lon: f64) -> ZoneIndex {
+        use crate::zones::{AiZone, ZoneStatus};
+        ZoneIndex::new(&[AiZone {
+            id: "t".into(),
+            name: "t".into(),
+            lat,
+            lon,
+            radius_m: 100.0,
+            status: ZoneStatus::Planned,
+            note: String::new(),
+            detects: String::new(),
+        }])
+    }
+
+    #[test]
+    fn edge_wholly_inside_a_zone_is_fully_exposed_with_no_cameras() {
+        let none = CameraIndex::new(Vec::new());
+        let zone = zone_100m(52.5200, 13.4050);
+        // ~22 m of street through the centre: every sample is inside.
+        let e = edge_exposure(52.5199, 13.4050, 52.5201, 13.4050, 22.0, &none, &zone);
+        assert_eq!(e, 1.0);
+    }
+
+    #[test]
+    fn edge_crossing_a_zone_scores_the_share_inside() {
+        let none = CameraIndex::new(Vec::new());
+        // Centred on the edge's midpoint with radius 100 m, a ~600 m
+        // north-south edge has about 200 m (a third) inside.
+        let zone = zone_100m(52.5200, 13.4050);
+        let half_deg = 300.0 / 111_320.0;
+        let e = edge_exposure(
+            52.5200 - half_deg,
+            13.4050,
+            52.5200 + half_deg,
+            13.4050,
+            600.0,
+            &none,
+            &zone,
+        );
+        assert!((e - 1.0 / 3.0).abs() < 0.03, "share inside was {e}");
+    }
+
+    #[test]
+    fn zone_and_camera_overlap_is_not_double_counted() {
+        // Exposure is a covered fraction of sample points, so a camera inside
+        // a zone must not push it past 1.
+        let cam = CameraIndex::new(vec![dome_at(52.5200, 13.4050, 30.0)]);
+        let zone = zone_100m(52.5200, 13.4050);
+        let e = edge_exposure(52.5199, 13.4050, 52.5201, 13.4050, 22.0, &cam, &zone);
+        assert_eq!(e, 1.0);
     }
 }
