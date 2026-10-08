@@ -19,6 +19,13 @@ the permission to reach the internet.
   <a href="https://github.com/phrag/SchattenWeg/releases">all versions</a>
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/01-route.png" width="30%" alt="A walking route at High avoidance: 3356 m, 0% under watch, steering around clusters of mapped cameras">
+  <img src="docs/screenshots/02-ai-zone-kottbusser-tor.png" width="30%" alt="Kottbusser Tor AI-video zone: a dashed violet circle with its status and what it detects">
+  <img src="docs/screenshots/03-ai-zone-goerlitzer-park.png" width="30%" alt="Görlitzer Park planned AI-video zone, shown as an approximate circle">
+</p>
+<p align="center"><sub>A camera-free route at <b>High</b> avoidance &middot; police AI-video zones (violet circles), long-press for details</sub></p>
+
 ---
 
 ## Contents
