@@ -83,7 +83,7 @@ android {
         // Map data must be stored uncompressed: PMTiles needs byte-range
         // reads, and AssetManager.openFd() refuses compressed entries. These
         // formats are already compressed internally, so nothing is lost.
-        noCompress += listOf("pbf", "pmtiles")
+        noCompress += listOf("pbf", "pmtiles", "graphcache")
     }
 
     compileOptions {

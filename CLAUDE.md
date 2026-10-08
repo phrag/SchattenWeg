@@ -267,11 +267,14 @@ next to the extract in `filesDir` instead of re-deriving it, so every cold
 start *after the first* skips the pass. The cache is only the four flat inputs
 the router is assembled from (nodes, scored edges, cameras, places); its header
 carries a format/logic `VERSION` and a fingerprint of the source extract, and
-any mismatch or malformed byte makes it fall back to the PBF. **Two levers
-remain:** the *first* launch still pays the pass — pre-generating the cache at
-build time (invoke the same code path in `build_map_assets.sh`, ship the
-snapshot, and the app could then stop bundling the `.pbf`) would kill it
-entirely; and `rstar` in place of the grids is a smaller, orthogonal win.
+any mismatch or malformed byte makes it fall back to the PBF. **Pre-built at asset-build time:**
+`build_map_assets.sh` now runs `core/examples/build_cache.rs` (same `Router::open`
+path) and bundles `berlin-routing.graphcache` beside the snapshot; `MapAssets`
+copies it to `filesDir`, so even the first launch skips the pass. The cache
+fingerprint is a **content hash** of the extract (not size+mtime, which would
+change when the asset is copied); a missing/stale cache still falls back to the
+PBF. `SKIP_CACHE=1` skips the step. Remaining lever: stop bundling the `.pbf`,
+and `rstar` in place of the grids.
 **When the scoring/geometry logic changes** (`camera.rs` coverage, the
 `defaults` table, `exposure.rs` sampling), bump `cache::VERSION` so stale
 scores can't outlive the code that produced them.
