@@ -11,22 +11,13 @@ the routing all live on your phone. Nothing you do — where you are, where you'
 going, the route you take — ever leaves the device. The app doesn't even hold
 the permission to reach the internet.
 
-<!-- Screenshots live in docs/screenshots/ — see docs/screenshots/README.md.
-     Until they're added, the images below show their captions as placeholders. -->
-<table>
-  <tr>
-    <td width="25%"><img src="docs/screenshots/01-map-cameras.png" alt="The map of central Berlin with camera dots and their coverage areas"></td>
-    <td width="25%"><img src="docs/screenshots/02-route.png" alt="A walking route steering around cameras, with the Low / Medium / High control"></td>
-    <td width="25%"><img src="docs/screenshots/03-search.png" alt="Searching for a street or place, offline"></td>
-    <td width="25%"><img src="docs/screenshots/04-layers-about.png" alt="The layers panel and About section"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Cameras &amp; their coverage</sub></td>
-    <td align="center"><sub>A route that dodges the lenses</sub></td>
-    <td align="center"><sub>Offline place search</sub></td>
-    <td align="center"><sub>Layers &amp; credits</sub></td>
-  </tr>
-</table>
+<p align="center">
+  <a href="https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk"><b>⬇&nbsp;Download the latest APK</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/phrag/SchattenWeg/releases/tag/latest">release notes</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/phrag/SchattenWeg/releases">all versions</a>
+</p>
 
 ---
 
@@ -45,10 +36,12 @@ the permission to reach the internet.
 
 ## Download & install
 
-1. Open the **[Releases page](https://github.com/phrag/SchattenWeg/releases)** and
-   download the most recent `.apk`.
-   - The rolling **`latest`** build tracks the newest tested commit; tagged
-     builds like `v0.1.0` are fixed versions. Either is fine.
+1. **[Download the latest APK](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk)**
+   — a direct link, rebuilt on every push to `main`, so it is always the newest
+   build. (Its [release page](https://github.com/phrag/SchattenWeg/releases/tag/latest)
+   says which commit and OSM snapshot it carries.)
+   - Want a fixed version instead? Tagged builds like `v0.1.0` are on the
+     **[Releases page](https://github.com/phrag/SchattenWeg/releases)**.
 2. Copy it to your phone and tap it. Android will ask you to allow installing
    from this source — that's the normal sideloading prompt for an app that
    isn't from a store.
@@ -142,7 +135,7 @@ Both of these are shown inside the app, on purpose.
 ---
 
 > **The rest of this page is for developers.** If you just want to use the app,
-> you're all set — grab the APK from [Releases](https://github.com/phrag/SchattenWeg/releases)
+> you're all set — [grab the latest APK](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk)
 > and go.
 
 ## Build from source
@@ -253,7 +246,9 @@ SchattenWeg/
 
 ### Releases
 
-Pushes to `main` publish a rolling **`latest`** debug APK; pushing a `v*` tag
+Pushes to `main` publish a rolling **`latest`** debug APK under a fixed name,
+`schattenweg-latest-debug.apk` (that stable name is what keeps the README's
+direct download link working — don't put the commit in it); pushing a `v*` tag
 publishes a versioned one. Both regenerate the map assets from a freshly
 downloaded OSM extract, so a released APK always carries the latest cameras and
 **maps and routes out of the box** — see
