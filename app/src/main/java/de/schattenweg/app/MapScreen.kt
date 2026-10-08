@@ -524,7 +524,6 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     viewModel.clearSearch()
                 },
             )
-            StatusCard(state = state, modifier = Modifier.fillMaxWidth())
         }
 
         // Layers toggle + zoom controls, clear of both cards.
@@ -587,6 +586,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             // are non-negotiable, so they live in the panel that is open by
             // default). The panel slides shut to uncover the map.
             AvoidancePanel(
+                state = state,
                 level = level,
                 onSelect = {
                     viewModel.level.value = it
@@ -873,6 +873,7 @@ private fun LicensesScreen(onClose: () -> Unit) {
  */
 @Composable
 private fun AvoidancePanel(
+    state: RouteViewModel.UiState,
     level: AvoidanceLevel,
     onSelect: (AvoidanceLevel) -> Unit,
     collapsed: Boolean,
@@ -904,6 +905,13 @@ private fun AvoidancePanel(
                         .background(Color(0xFF48505C)),
                 )
             }
+            // Status / instructions line: stays visible when collapsed.
+            Text(
+                statusText(state),
+                Modifier.padding(bottom = 6.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFF2F4F8),
+            )
             AnimatedVisibility(visible = !collapsed) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
@@ -1127,9 +1135,8 @@ private fun AiZoneInfoCard(zone: AiZone, onDismiss: () -> Unit) {
     }
 }
 
-@Composable
-private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modifier) {
-    val text = when (state) {
+private fun statusText(state: RouteViewModel.UiState): String =
+    when (state) {
         is RouteViewModel.UiState.Loading -> "Loading Berlin surveillance map…"
 
         is RouteViewModel.UiState.Ready ->
@@ -1144,18 +1151,6 @@ private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modif
 
         is RouteViewModel.UiState.Error -> state.message
     }
-    Card(
-        modifier,
-        colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
-    ) {
-        Text(
-            text,
-            Modifier.padding(12.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFF2F4F8),
-        )
-    }
-}
 
 /** How far around the viewport centre to pull cameras for the map layer. */
 private const val TAG = "Schattenweg"
