@@ -96,7 +96,9 @@ impl Router {
         Ok(Arc::new(Self::assemble(build_parts_from_pbf(&pbf_path)?)))
     }
 
-    /// Build a router, reading a cached scored graph if one is valid.
+    /// Build a router, reading a cached scored graph if one is valid. The cache
+    /// is normally pre-built at asset-build time (`examples/build_cache.rs`) and
+    /// shipped beside the extract, so even the first launch skips the pass.
     ///
     /// Preferred over [`Router::from_pbf`] on device: the exposure pass over
     /// every edge is a several-second cost otherwise paid on every cold start,
@@ -244,19 +246,16 @@ fn build_parts_from_pbf(pbf_path: &str) -> Result<cache::Parts, RouteError> {
 }
 
 /// Fingerprint of the source extract for cache validation, or `None` if it
-/// can't be stat'd (in which case caching is simply skipped). Uses file size
-/// and last-modified time — see [`cache::fingerprint`].
+/// can't be read (in which case caching is simply skipped). Content-based, so a
+/// cache pre-built at build time stays valid after the extract is copied into
+/// app storage — see [`cache::fingerprint`].
 fn source_fingerprint(pbf_path: &str) -> Option<u64> {
-    let meta = std::fs::metadata(pbf_path).ok()?;
-    let mtime = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let file = std::fs::File::open(pbf_path).ok()?;
+    let source = cache::fingerprint(&mut std::io::BufReader::new(file)).ok()?;
     // The zone table is baked into every cached score, so it is part of what
-    // the cache is valid for: edit a zone and the old cache is rejected.
-    Some(cache::fingerprint(meta.len(), mtime) ^ zones::signature(&zones::table()))
+    // the cache is valid for: edit a zone and the old cache (including one
+    // pre-built into the APK) is rejected and the pass re-runs.
+    Some(source ^ zones::signature(&zones::table()))
 }
 
 /// Best-effort cache write: to a temp file then rename, so an interrupted write
