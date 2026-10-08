@@ -35,7 +35,7 @@ const MAGIC: &[u8; 4] = b"SWGC";
 /// sampling in `exposure.rs`). The cached edge exposures are only as current as
 /// the code that wrote them; bumping the version invalidates every old cache so
 /// a stale score can never outlive the logic that produced it.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 /// The four flat vectors a `Router` is assembled from. This is exactly what the
 /// PBF ingest produces (with edges already scored) and exactly what the cache
@@ -186,17 +186,29 @@ pub fn read<R: Read>(r: &mut R, expected_fingerprint: u64) -> io::Result<Parts> 
     })
 }
 
-/// A cheap identifier for a source extract: its byte length mixed with its last
-/// modification time. If the bundled extract is replaced (a new Geofabrik cut),
-/// either changes and the old cache is rejected. Not a content hash — hashing a
-/// ~100 MB PBF on every launch would eat the very time the cache saves — but
-/// enough to catch the only realistic staleness cause: a rebuilt asset.
-pub fn fingerprint(len: u64, mtime_secs: i64) -> u64 {
-    // A tiny splitmix-style mix so len and mtime both spread across all bits.
-    let mut x = len ^ ((mtime_secs as u64).rotate_left(32));
-    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    x ^ (x >> 31)
+/// Identifier for a source extract: an FNV-1a hash of its *contents*, mixed
+/// with its length. It must be content-based, not size+mtime: the cache can be
+/// generated at build time and shipped inside the APK, and the extract is then
+/// copied into `filesDir` on first launch, which gives it a new mtime. The
+/// filtered Berlin snapshot is tens of MB, so hashing it costs tens of
+/// milliseconds — negligible next to the exposure pass the cache skips.
+pub fn fingerprint<R: Read>(r: &mut R) -> io::Result<u64> {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut h = OFFSET;
+    let mut len = 0u64;
+    let mut buf = vec![0u8; 1 << 16];
+    loop {
+        let n = r.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        len += n as u64;
+        for &b in &buf[..n] {
+            h = (h ^ b as u64).wrapping_mul(PRIME);
+        }
+    }
+    Ok(h ^ len.rotate_left(32))
 }
 
 /// Cap on up-front allocation from a length field, so a corrupt count can't ask
@@ -411,9 +423,10 @@ mod tests {
     }
 
     #[test]
-    fn fingerprint_reacts_to_len_and_mtime() {
-        let base = fingerprint(100, 1000);
-        assert_ne!(base, fingerprint(101, 1000));
-        assert_ne!(base, fingerprint(100, 1001));
+    fn fingerprint_depends_on_content_only() {
+        let fp = |b: &[u8]| fingerprint(&mut &b[..]).unwrap();
+        assert_eq!(fp(b"berlin"), fp(b"berlin"));
+        assert_ne!(fp(b"berlin"), fp(b"berlim"));
+        assert_ne!(fp(b"berlin"), fp(b"berlin\0"));
     }
 }

@@ -301,6 +301,23 @@ osmium fileinfo -e "$ROUTING" | sed -n 's/^  Number of/  /p' || true
 cp "$ROUTING" "$ASSETS/berlin-routing.osm.pbf"
 echo "-> $ROUTING (bundled into app assets)"
 
+# Pre-build the scored-graph cache with the same core code the app runs, so the
+# first launch loads it instead of spending seconds on the exposure pass. It is
+# keyed to this exact snapshot's contents; the app falls back to scoring from
+# the .pbf if it is missing or stale, so failure here only costs launch speed.
+# SKIP_CACHE=1 skips it.
+CACHE_ASSET="$ASSETS/berlin-routing.graphcache"
+rm -f "$CACHE_ASSET"
+if [[ "${SKIP_CACHE:-0}" != "1" ]]; then
+    if command -v cargo >/dev/null 2>&1; then
+        cargo run --quiet --release --manifest-path "$ROOT/core/Cargo.toml" \
+            --example build_cache -- "$ASSETS/berlin-routing.osm.pbf" "$CACHE_ASSET" \
+            || { echo "WARNING: cache pre-build failed; app will score on first launch"; rm -f "$CACHE_ASSET"; }
+    else
+        echo "cargo not found -- skipping cache pre-build (app scores on first launch)"
+    fi
+fi
+
 # Provenance: record what this snapshot actually contains so a build can state
 # how current its cameras are. The OSM snapshot date is the extract's own
 # replication timestamp (when Geofabrik cut it, not when we downloaded it); the
