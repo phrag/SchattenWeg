@@ -133,6 +133,12 @@ private val BERLIN = LatLng(52.5216, 13.4127)
 /** Where the in-app credit points: the project on GitHub. */
 private const val PROJECT_URL = "https://github.com/phrag/SchattenWeg"
 
+/**
+ * The rolling "latest" release (rebuilt on every push to main — see
+ * release.yml): the newest APK, with the commit and OSM snapshot it carries.
+ */
+private const val LATEST_RELEASE_URL = "https://github.com/phrag/SchattenWeg/releases/tag/latest"
+
 /** The maintainer's GitHub profile, shown as "by phrag" in the About section. */
 private const val MAINTAINER_URL = "https://github.com/phrag"
 
@@ -754,6 +760,7 @@ private fun LayersPanel(
                     color = Color(0xFF9AA4B2),
                 )
             }
+            LinkText("Get the latest version", LATEST_RELEASE_URL, Modifier.padding(top = 2.dp))
             // The credit lines link to their licences (ODbL / CC-BY), as both
             // ask attribution to point at the terms.
             LinkText(
