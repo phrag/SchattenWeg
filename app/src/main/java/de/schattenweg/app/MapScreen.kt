@@ -4,11 +4,15 @@ import android.content.Intent
 import android.graphics.RectF
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +59,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -88,6 +94,7 @@ private enum class LayerGroup(val label: String, val ids: List<String>) {
     CAMERAS("Cameras", listOf("sw-camera-dots")),
     COVERAGE("Camera coverage", listOf("sw-camera-coverage-fill")),
     AI_ZONES("AI-monitored zones", listOf(AI_ZONE_FILL, AI_ZONE_LINE)),
+    SURVEY("My survey notes", listOf(SURVEY_LAYER, SURVEY_DRAFT_LAYER)),
     LABELS("Labels", listOf("label-street", "label-transit", "label-place")),
     BUILDINGS(
         "Buildings & landuse",
@@ -109,6 +116,15 @@ private const val ROUTE_SOURCE = "sw-route"
 private const val AI_ZONE_SOURCE = "sw-ai-zones"
 private const val AI_ZONE_FILL = "sw-ai-zones-fill"
 private const val AI_ZONE_LINE = "sw-ai-zones-line"
+
+/**
+ * The user's own camera notes (see SurveyNotes.kt): a private overlay. The
+ * draft is the not-yet-saved point being edited.
+ */
+private const val SURVEY_SOURCE = "sw-survey"
+private const val SURVEY_LAYER = "sw-survey-dots"
+private const val SURVEY_DRAFT_SOURCE = "sw-survey-draft"
+private const val SURVEY_DRAFT_LAYER = "sw-survey-draft-ring"
 private const val ENDPOINT_SOURCE = "sw-endpoints"
 
 /** Berlin, Alexanderplatz — where the map opens. */
@@ -172,6 +188,37 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val mapRef = remember { mutableStateOf<MapLibreMap?>(null) }
     val selectedCameraId = remember { mutableStateOf<Long?>(null) }
     val selectedZoneId = remember { mutableStateOf<String?>(null) }
+    val surveyNotes by viewModel.surveyNotes.collectAsState()
+    // While on, a tap places a survey note instead of routing. Held in
+    // MutableStates because the map listeners are registered once.
+    val surveyMode = remember { mutableStateOf(false) }
+    val draftAt = remember { mutableStateOf<LatLon?>(null) }
+    val selectedNoteId = remember { mutableStateOf<Long?>(null) }
+    val scope = rememberCoroutineScope()
+    // The system file picker: the user chooses where the export goes, so the
+    // app needs no storage permission and never learns the location.
+    val exportLauncher = rememberLauncherForActivityResult(
+        // Generic type so the picker keeps the ".osm" name instead of
+        // appending an extension for a more specific one.
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val xml = viewModel.surveyOsmXml()
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use {
+                        it.write(xml.toByteArray(Charsets.UTF_8))
+                    } ?: error("no output stream")
+                }.onFailure { Log.w(TAG, "Survey export failed", it) }.isSuccess
+            }
+            Toast.makeText(
+                context,
+                if (ok) "Survey notes exported" else "Could not save the file",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
     val layersOn: SnapshotStateMap<LayerGroup, Boolean> = remember {
         mutableStateMapOf(*LayerGroup.entries.map { it to true }.toTypedArray())
     }
@@ -212,6 +259,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
     val selectedCamera = cameras.firstOrNull { it.osmId == selectedCameraId.value }
     val selectedZone = AI_ZONES.firstOrNull { it.id == selectedZoneId.value }
+    val selectedNote = surveyNotes.firstOrNull { it.id == selectedNoteId.value }
 
     Box(Modifier.fillMaxSize()) {
         // The style can only be built once provisioning has told us whether
@@ -246,6 +294,8 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             mapView.getMapAsync { map ->
                 map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
                     style.addSource(GeoJsonSource(AI_ZONE_SOURCE, aiZonesGeoJson()))
+                    style.addSource(GeoJsonSource(SURVEY_SOURCE, EMPTY_COLLECTION))
+                    style.addSource(GeoJsonSource(SURVEY_DRAFT_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(COVERAGE_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(ROUTE_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(CAMERA_SOURCE, EMPTY_COLLECTION))
@@ -293,6 +343,24 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                             PropertyFactory.circleOpacity(0.85f),
                             PropertyFactory.circleStrokeWidth(1f),
                             PropertyFactory.circleStrokeColor("#2a0f11"),
+                        ),
+                    )
+                    // The user's own notes: cyan, so they read as "mine" and
+                    // never as OSM data (red). The draft is a hollow ring.
+                    style.addLayer(
+                        CircleLayer(SURVEY_LAYER, SURVEY_SOURCE).withProperties(
+                            PropertyFactory.circleRadius(6f),
+                            PropertyFactory.circleColor("#5fd0e8"),
+                            PropertyFactory.circleStrokeWidth(2f),
+                            PropertyFactory.circleStrokeColor("#10141a"),
+                        ),
+                    )
+                    style.addLayer(
+                        CircleLayer(SURVEY_DRAFT_LAYER, SURVEY_DRAFT_SOURCE).withProperties(
+                            PropertyFactory.circleRadius(9f),
+                            PropertyFactory.circleColor("#005fd0e8"),
+                            PropertyFactory.circleStrokeWidth(3f),
+                            PropertyFactory.circleStrokeColor("#5fd0e8"),
                         ),
                     )
                     style.addLayer(
@@ -357,6 +425,18 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             }
         }
 
+        // Same rule as above: explicit keys, because the writes happen inside
+        // getMapAsync's callback.
+        LaunchedEffect(surveyNotes, draftAt.value) {
+            val notesJson = surveyGeoJson(surveyNotes)
+            val draftJson = pointsGeoJson(listOfNotNull(draftAt.value))
+            mapView.getMapAsync { map ->
+                val style = map.style ?: return@getMapAsync
+                style.getSourceAs<GeoJsonSource>(SURVEY_SOURCE)?.setGeoJson(notesJson)
+                style.getSourceAs<GeoJsonSource>(SURVEY_DRAFT_SOURCE)?.setGeoJson(draftJson)
+            }
+        }
+
         // Push layer visibility to the style. Keyed on the toggle map and the
         // asset load so it re-applies when the style is rebuilt.
         LaunchedEffect(layersOn.toMap(), basemapReady) {
@@ -412,6 +492,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         Log.d(TAG, "Map tapped at ${point.latitude},${point.longitude}")
                         selectedCameraId.value = null
                         selectedZoneId.value = null
+                        selectedNoteId.value = null
+                        // Survey mode: the tap places a note, it does not route.
+                        if (surveyMode.value) {
+                            draftAt.value = LatLon(point.latitude, point.longitude)
+                            return@addOnMapClickListener true
+                        }
                         viewModel.onMapTap(LatLon(point.latitude, point.longitude))
                         true
                     }
@@ -430,7 +516,17 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                             .firstOrNull()
                             ?.getNumberProperty("osm_id")
                             ?.toLong()
-                        val zoneHit = if (hit == null) {
+                        // Narrowest target first: a camera, then the user's own
+                        // note, then the (large) AI zone beneath them.
+                        val noteHit = if (hit == null) {
+                            map.queryRenderedFeatures(touch, SURVEY_LAYER)
+                                .firstOrNull()
+                                ?.getNumberProperty("id")
+                                ?.toLong()
+                        } else {
+                            null
+                        }
+                        val zoneHit = if (hit == null && noteHit == null) {
                             map.queryRenderedFeatures(touch, AI_ZONE_FILL)
                                 .firstOrNull()
                                 ?.getStringProperty("id")
@@ -440,15 +536,23 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                         if (hit != null) {
                             Log.d(TAG, "Camera long-pressed: osm id $hit")
                             selectedZoneId.value = null
+                            selectedNoteId.value = null
                             selectedCameraId.value = hit
+                        } else if (noteHit != null) {
+                            Log.d(TAG, "Survey note long-pressed: $noteHit")
+                            selectedCameraId.value = null
+                            selectedZoneId.value = null
+                            selectedNoteId.value = noteHit
                         } else if (zoneHit != null) {
                             Log.d(TAG, "AI zone long-pressed: $zoneHit")
                             selectedCameraId.value = null
+                            selectedNoteId.value = null
                             selectedZoneId.value = zoneHit
                         } else {
                             Log.d(TAG, "Long-press on empty map: undo last point")
                             selectedCameraId.value = null
                             selectedZoneId.value = null
+                            selectedNoteId.value = null
                             viewModel.clearLastPoint()
                         }
                         true
@@ -513,6 +617,14 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ZoomButton("\u2261") { panelOpen.value = !panelOpen.value }
+            // Survey mode: note a camera you can see. Cyan when active.
+            ZoomButton(if (surveyMode.value) "\u2715" else "\uD83D\uDCF7") {
+                surveyMode.value = !surveyMode.value
+                draftAt.value = null
+                selectedCameraId.value = null
+                selectedZoneId.value = null
+                selectedNoteId.value = null
+            }
             ZoomButton("+") {
                 mapRef.value?.animateCamera(CameraUpdateFactory.zoomIn())
             }
@@ -524,6 +636,8 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         if (panelOpen.value) {
             LayersPanel(
                 layersOn = layersOn,
+                surveyCount = surveyNotes.size,
+                onExportSurvey = { exportLauncher.launch("schattenweg-survey.osm") },
                 version = appVersion,
                 onOpenLicenses = { licensesOpen.value = true },
                 modifier = Modifier
@@ -560,6 +674,30 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             selectedZone?.let { zone ->
                 AiZoneInfoCard(zone) { selectedZoneId.value = null }
             }
+            selectedNote?.let { note ->
+                SurveyNoteCard(
+                    note,
+                    onDelete = {
+                        viewModel.deleteSurveyNote(note.id)
+                        selectedNoteId.value = null
+                    },
+                    onDismiss = { selectedNoteId.value = null },
+                )
+            }
+            if (surveyMode.value) {
+                val draft = draftAt.value
+                if (draft == null) {
+                    SurveyHintCard(onDone = { surveyMode.value = false })
+                } else {
+                    SurveyEditorCard(
+                        onSave = { kind, dir, mount ->
+                            viewModel.addSurveyNote(draft, kind, dir, mount)
+                            draftAt.value = null
+                        },
+                        onCancel = { draftAt.value = null },
+                    )
+                }
+            }
 
             // Avoidance control + the two honesty notes (see CLAUDE.md §5 — these
             // are non-negotiable, so they live in the panel that is open by
@@ -583,6 +721,12 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
         // Opened from About. A full-bleed overlay showing the bundled licence
         // texts; the system back button closes it rather than leaving the app.
+        if (surveyMode.value && !licensesOpen.value) {
+            BackHandler {
+                // Back steps out: first the open draft, then survey mode.
+                if (draftAt.value != null) draftAt.value = null else surveyMode.value = false
+            }
+        }
         if (licensesOpen.value) {
             BackHandler { licensesOpen.value = false }
             LicensesScreen(onClose = { licensesOpen.value = false })
@@ -683,6 +827,8 @@ private fun SearchResultRow(
 @Composable
 private fun LayersPanel(
     layersOn: SnapshotStateMap<LayerGroup, Boolean>,
+    surveyCount: Int,
+    onExportSurvey: () -> Unit,
     version: String?,
     onOpenLicenses: () -> Unit,
     modifier: Modifier = Modifier,
@@ -720,6 +866,21 @@ private fun LayersPanel(
                     )
                 }
             }
+            // Survey notes never leave the device on their own; this writes
+            // them to a file the user picks, for upload from an OSM editor.
+            Text(
+                "Export survey notes ($surveyCount)",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (surveyCount > 0) Color(0xFF7FD4A2) else Color(0xFF5E6877),
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .clickable(enabled = surveyCount > 0, onClick = onExportSurvey),
+            )
+            Text(
+                "Saves an .osm file for JOSM or Vespucci. Nothing is uploaded.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF9AA4B2),
+            )
             // Credits live here, out of the way of the map: the version, the map
             // attribution (a licence obligation — OSM data is ODbL, the
             // OpenMapTiles schema CC-BY, both needing a visible credit even
@@ -1102,6 +1263,183 @@ private fun AiZoneInfoCard(zone: AiZone, onDismiss: () -> Unit) {
     }
 }
 
+/** Shown while survey mode is on and no point has been placed yet. */
+@Composable
+private fun SurveyHintCard(onDone: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "Survey mode: tap the map where you see a camera.",
+                style = MaterialTheme.typography.titleSmall,
+                color = Color(0xFFF2F4F8),
+            )
+            Text(
+                "Routing is paused. Notes stay on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFC7D0DA),
+            )
+            Text(
+                "Done",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF7FD4A2),
+                modifier = Modifier.clickable(onClick = onDone).padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+/** A row of mutually exclusive choices; scrolls sideways rather than wrapping. */
+@Composable
+private fun <T> ChoiceRow(
+    title: String,
+    options: List<Pair<String, T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+) {
+    Text(title, style = MaterialTheme.typography.labelSmall, color = Color(0xFF9AA4B2))
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        for ((label, value) in options) {
+            val on = value == selected
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (on) Color(0xFF10141A) else Color(0xFFF2F4F8),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (on) Color(0xFF5FD0E8) else Color(0x33FFFFFF))
+                    .clickable { onSelect(value) }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Describe the camera you just placed. Every field is optional and defaults to
+ * "don't know": nothing is guessed on the user's behalf, and the export only
+ * contains what was chosen here. No free text, so a note cannot carry a
+ * description of a person or a place.
+ */
+@Composable
+private fun SurveyEditorCard(
+    onSave: (SurveyNote.Kind, Int?, SurveyNote.Mount?) -> Unit,
+    onCancel: () -> Unit,
+) {
+    val kind = remember { mutableStateOf(SurveyNote.Kind.UNKNOWN) }
+    val dir = remember { mutableStateOf<Int?>(null) }
+    val mount = remember { mutableStateOf<SurveyNote.Mount?>(null) }
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xF2161B22)),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                "New camera note",
+                style = MaterialTheme.typography.titleSmall,
+                color = Color(0xFFF2F4F8),
+            )
+            ChoiceRow(
+                "Type",
+                SurveyNote.Kind.entries.map { it.label to it },
+                kind.value,
+            ) {
+                kind.value = it
+                // A bearing means little for a dome or a panning camera.
+                if (it != SurveyNote.Kind.FIXED) dir.value = null
+            }
+            if (kind.value == SurveyNote.Kind.FIXED) {
+                ChoiceRow(
+                    "Faces (compass)",
+                    listOf<Pair<String, Int?>>("?" to null) +
+                        listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+                            .mapIndexed { i, name -> name to i * 45 },
+                    dir.value,
+                ) { dir.value = it }
+            }
+            ChoiceRow(
+                "Mounted on",
+                listOf<Pair<String, SurveyNote.Mount?>>("?" to null) +
+                    SurveyNote.Mount.entries.map { it.label to it },
+                mount.value,
+            ) { mount.value = it }
+            Text(
+                "Stored on this device only. Leave anything you are unsure of as ?.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF9AA4B2),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text(
+                    "Save",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFF7FD4A2),
+                    modifier = Modifier.clickable {
+                        onSave(kind.value, dir.value, mount.value)
+                    },
+                )
+                Text(
+                    "Cancel",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFFC7D0DA),
+                    modifier = Modifier.clickable(onClick = onCancel),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SurveyNoteCard(note: SurveyNote, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "My note: ${note.kind.label.lowercase()} camera",
+                style = MaterialTheme.typography.titleSmall,
+                color = Color(0xFFF2F4F8),
+            )
+            val facing = note.directionDeg
+                ?.let { "Faces $it\u00B0 (${compassPoint(it.toDouble())})" }
+                ?: "Direction not recorded"
+            val mounted = note.mount?.let { " \u00B7 on a ${it.label.lowercase()}" }.orEmpty()
+            Text(
+                facing + mounted,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFC7D0DA),
+            )
+            Text(
+                "Yours alone: not in OpenStreetMap and not used for routing.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF9AA4B2),
+            )
+            Row(
+                Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                Text(
+                    "Delete",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFFE0575B),
+                    modifier = Modifier.clickable(onClick = onDelete),
+                )
+                Text(
+                    "Dismiss",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFF7FD4A2),
+                    modifier = Modifier.clickable(onClick = onDismiss),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modifier) {
     val text = when (state) {
@@ -1249,6 +1587,16 @@ private fun compassPoint(deg: Double): String {
     val names = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
     val norm = ((deg % 360.0) + 360.0) % 360.0
     return names[(norm / 45.0).roundToInt() % 8]
+}
+
+/** Survey notes as points, carrying the id a long-press resolves back to. */
+private fun surveyGeoJson(notes: List<SurveyNote>): String {
+    if (notes.isEmpty()) return EMPTY_COLLECTION
+    val features = notes.joinToString(",") { n ->
+        """{"type":"Feature","geometry":{"type":"Point",""" +
+            """"coordinates":[${n.lon},${n.lat}]},"properties":{"id":${n.id}}}"""
+    }
+    return """{"type":"FeatureCollection","features":[$features]}"""
 }
 
 private fun pointsGeoJson(points: List<LatLon>): String {
