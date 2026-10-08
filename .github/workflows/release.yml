@@ -195,15 +195,61 @@ jobs:
           } > release-notes.md
           echo "--- release notes ---"; cat release-notes.md
 
+      # Optional: a release-key-signed APK, built ONLY when the signing secrets
+      # exist (see docs/SIGNING.md). Without them this step is a no-op and the
+      # run behaves exactly as before. The keystore arrives base64-encoded in a
+      # secret, is decoded to the runner's temp dir for the one Gradle call, and
+      # deleted afterwards; app/build.gradle.kts reads the SCHATTENWEG_* vars.
+      # Secrets are passed through env (never interpolated into the script) and
+      # are not available to runs from forks.
+      - name: Build signed release APK (if signing secrets are set)
+        id: signed
+        env:
+          KEYSTORE_B64: ${{ secrets.SCHATTENWEG_KEYSTORE_B64 }}
+          SCHATTENWEG_STORE_PASSWORD: ${{ secrets.SCHATTENWEG_STORE_PASSWORD }}
+          SCHATTENWEG_KEY_ALIAS: ${{ secrets.SCHATTENWEG_KEY_ALIAS }}
+          SCHATTENWEG_KEY_PASSWORD: ${{ secrets.SCHATTENWEG_KEY_PASSWORD }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$SCHATTENWEG_STORE_PASSWORD" ] \
+             || [ -z "$SCHATTENWEG_KEY_ALIAS" ] || [ -z "$SCHATTENWEG_KEY_PASSWORD" ]; then
+            echo "Signing secrets not set; skipping the signed release build."
+            exit 0
+          fi
+
+          keystore="$RUNNER_TEMP/schattenweg-release.jks"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$keystore"
+          export SCHATTENWEG_STORE_FILE="$keystore"
+
+          ./gradlew :app:assembleRelease --no-daemon
+
+          built="$(ls app/build/outputs/apk/release/*.apk | head -n1)"
+          apksigner="$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/apksigner | sort -V | tail -n1)"
+          "$apksigner" verify --print-certs "$built"
+
+          signed="schattenweg-${TAG}-release.apk"
+          cp "$built" "$signed"
+          echo "apk=$signed" >> "$GITHUB_OUTPUT"
+          {
+            echo ""
+            echo "Also attached: \`$signed\`, signed with the project release key"
+            echo "(no \`.debug\` suffix, so it installs alongside the debug build)."
+          } >> release-notes.md
+
       # Rolling "latest": move the tag to this commit by replacing the release.
       - name: Publish rolling latest release
         if: steps.meta.outputs.tag == 'latest'
         env:
           GH_TOKEN: ${{ github.token }}
+          SIGNED_APK: ${{ steps.signed.outputs.apk }}
         run: |
           set -euo pipefail
+          assets=("${{ steps.meta.outputs.apk }}")
+          [ -n "$SIGNED_APK" ] && assets+=("$SIGNED_APK")
           gh release delete latest --cleanup-tag --yes || true
-          gh release create latest "${{ steps.meta.outputs.apk }}" \
+          gh release create latest "${assets[@]}" \
             --target "$GITHUB_SHA" \
             --title "${{ steps.meta.outputs.title }}" \
             --notes-file release-notes.md \
@@ -216,12 +262,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+          SIGNED_APK: ${{ steps.signed.outputs.apk }}
         run: |
           set -euo pipefail
+          assets=("${{ steps.meta.outputs.apk }}")
+          [ -n "$SIGNED_APK" ] && assets+=("$SIGNED_APK")
           flags=(--title "${{ steps.meta.outputs.title }}" --notes-file release-notes.md)
           [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
-          gh release create "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" "${flags[@]}" \
-            || gh release upload "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" --clobber
+          gh release create "${{ steps.meta.outputs.tag }}" "${assets[@]}" "${flags[@]}" \
+            || gh release upload "${{ steps.meta.outputs.tag }}" "${assets[@]}" --clobber
 
       # Also attach the APK to the workflow run, so it is retrievable even if the
       # release step is skipped (e.g. a fork without contents:write).
