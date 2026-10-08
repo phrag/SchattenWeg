@@ -7,6 +7,11 @@ add them here with the names below **and** put the gallery back in the README
 (`<img src="docs/screenshots/01-map-cameras.png" …>`) in the same commit, so
 the page never points at a file that isn't there.
 
+Currently committed and shown in the README: `01-route.png`,
+`02-ai-zone-kottbusser-tor.png`, `03-ai-zone-goerlitzer-park.png`.
+
+Still wanted:
+
 | File | What to capture |
 |------|-----------------|
 | `01-map-cameras.png` | The map zoomed into central Berlin, camera dots visible with their coverage wedges/discs drawn. |
