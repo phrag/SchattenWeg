@@ -12,10 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
 import uniffi.schattenweg_core.Camera
 import uniffi.schattenweg_core.LatLon
 import uniffi.schattenweg_core.Place
@@ -74,87 +71,6 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
     /** The search box text, and the results for it. */
     val searchQuery = MutableStateFlow("")
     val searchResults = MutableStateFlow<List<Place>>(emptyList())
-
-    /**
-     * The user's own camera notes: a private overlay, kept in app storage and
-     * never sent anywhere. Deliberately NOT given to the router -- an unverified
-     * personal note should not silently change a route, and the router's
-     * exposure cache is built from the bundled extract only.
-     */
-    val surveyNotes = MutableStateFlow<List<SurveyNote>>(emptyList())
-
-    private val surveyFile = File(application.filesDir, "survey_notes.txt")
-    private val surveyWriteLock = Mutex()
-
-    init {
-        viewModelScope.launch {
-            val loaded = withContext(Dispatchers.IO) {
-                runCatching {
-                    if (surveyFile.exists()) {
-                        SurveyNotes.decode(surveyFile.readText())
-                    } else {
-                        emptyList()
-                    }
-                }.getOrElse {
-                    Log.w(TAG, "Could not read survey notes", it)
-                    emptyList()
-                }
-            }
-            // A note added before the read finished must not be lost.
-            // Re-id so one made in the meantime cannot collide with a loaded id.
-            var merged = loaded
-            for (n in surveyNotes.value) {
-                merged = merged + n.copy(id = SurveyNotes.nextId(merged))
-            }
-            val addedMeanwhile = surveyNotes.value.isNotEmpty()
-            surveyNotes.value = merged
-            if (addedMeanwhile) persistSurvey()
-        }
-    }
-
-    fun addSurveyNote(
-        at: LatLon,
-        kind: SurveyNote.Kind,
-        directionDeg: Int?,
-        mount: SurveyNote.Mount?,
-    ) {
-        val current = surveyNotes.value
-        val note = SurveyNote(
-            id = SurveyNotes.nextId(current),
-            lat = at.lat,
-            lon = at.lon,
-            kind = kind,
-            directionDeg = directionDeg?.let(SurveyNotes::normalise),
-            mount = mount,
-        )
-        surveyNotes.value = current + note
-        persistSurvey()
-    }
-
-    fun deleteSurveyNote(id: Long) {
-        surveyNotes.value = surveyNotes.value.filterNot { it.id == id }
-        persistSurvey()
-    }
-
-    /** The notes as an OSM XML document, for the user to save wherever they choose. */
-    fun surveyOsmXml(): String = SurveyNotes.toOsm(surveyNotes.value)
-
-    /**
-     * Writes whatever the state is when the lock is won, so overlapping calls
-     * can never leave an older snapshot on disk. Temp file + rename keeps a
-     * crash from truncating the real one.
-     */
-    private fun persistSurvey() {
-        viewModelScope.launch(Dispatchers.IO) {
-            surveyWriteLock.withLock {
-                runCatching {
-                    val tmp = File(surveyFile.parentFile, surveyFile.name + ".tmp")
-                    tmp.writeText(SurveyNotes.encode(surveyNotes.value))
-                    if (!tmp.renameTo(surveyFile)) error("rename failed")
-                }.onFailure { Log.w(TAG, "Could not save survey notes", it) }
-            }
-        }
-    }
 
     /**
      * Copy the bundled map data out of the APK and build the Rust core from

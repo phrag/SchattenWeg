@@ -161,20 +161,6 @@ exposure value for it would be a number with no source. Do not bump
 once the promised entrance signage exists, and re-check the status table
 (`AI_ZONES_AS_OF`) — it goes stale as pilots start.
 
-**Survey notes (`SurveyNotes.kt`) — private overlay, decided.** The user can note
-a camera they see (📷 button → tap the map → type / compass facing / mount, all
-optional, **no free text**, no timestamp). Notes live in `filesDir/survey_notes.txt`
-(`allowBackup=false`), draw in cyan under "My survey notes", and are **never
-sent anywhere and never given to the router** — an unverified personal note
-must not silently change a route, and the exposure cache is built from the
-bundled extract only. The one way out is "Export survey notes" in the ☰ panel:
-a system file picker (no storage permission) writing an `.osm` file of
-negative-id nodes to open in JOSM / Vespucci and upload from there. **In-app
-upload was rejected:** it needs `INTERNET` + an OSM login, and a public
-changeset ties a person to the places they walked. Tags are written only if
-the user chose them; `surveillance=public|outdoor|indoor` is left to the
-mapper, and there is no "AI" tag (OSM has none — don't invent one).
-
 **Modes:** walking only (decided; cycling deferred).
 
 The map draws that same geometry: `coverageGeoJson` in `MapScreen.kt` renders
