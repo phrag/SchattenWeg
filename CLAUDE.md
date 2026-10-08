@@ -140,7 +140,8 @@ straight-line heuristic **admissible** for `λ ≥ 0`.
 
 **Exposure scoring** (`core/src/exposure.rs`): walk each edge in ~5 m steps; at
 each sample point ask whether any camera covers it; score = covered fraction.
-Done **once** at load time and baked onto edges.
+Done **once** at load time and baked onto edges. A point is "watched" if a
+camera covers it **or** it lies inside a police AI-video zone (below).
 
 **Field-of-view geometry** (`core/src/camera.rs`):
 - Directional/`fixed` camera with a known `camera:direction` → **cone**
@@ -148,6 +149,36 @@ Done **once** at load time and baked onto edges.
 - `dome` / `panning` / unknown → **disc** (range only).
 - Default range/FOV live in `camera::defaults` — deliberately conservative
   guesses; **tune against ground truth**, they are not from OSM.
+
+**AI-video zones (`core/src/zones.rs`) — routed around, decided.** Berlin police
+run (Kottbusser Tor) or have announced (Warschauer Brücke, Alexanderplatz,
+Görlitzer Park, plus three building pilots) AI behaviour detection on CCTV. No
+camera positions or boundaries are published — the Senate refused (Drucksache
+19/26970) — so each site is an **approximate circle** around a landmark.
+- **One table, in the core.** `zones::table()` feeds the exposure pass *and* is
+  exported to the UI (`ai_zones()`), which draws and describes exactly those
+  records. There is no second copy in Kotlin to drift. Edit zones there.
+- **How they affect routes:** a sample point inside a zone counts as watched,
+  exactly like a point inside a camera's field of view, so a zone raises an
+  edge's exposure by the share of it inside the circle and the usual
+  `length * (1 + λ * exposure)` weight does the rest. This is a deliberate
+  choice to treat "AI analysis happens here" as full exposure — a policy
+  judgement, not a measurement. A zone says nothing about lens count.
+- **Planned zones count too** (Alexanderplatz, Görlitzer Park, the buildings),
+  not only Kottbusser Tor. If that should change, filter on `ZoneStatus` where
+  `build_parts_from_pbf` builds the `ZoneIndex`.
+- **Cache:** the zone *geometry* is hashed into the cache fingerprint
+  (`zones::signature`), so editing a zone rebuilds the cache automatically;
+  reworded notes do not. Changing how zones are *scored* still needs a
+  `cache::VERSION` bump like any other scoring change. This also covers the
+  cache pre-built into the APK by `build_map_assets.sh`: it is built by the
+  same code, so it matches the zone table of the commit it was built from. A
+  stale asset set built before a zone edit is rejected on-device and the app
+  scores on first launch instead — slower, never wrong.
+- **UI:** violet dashed circles under "AI-monitored zones", long-press for
+  status and what is detected. Hiding the layer does not change routing.
+  Re-check `AS_OF` and the status table as pilots start; replace the circles
+  with surveyed outlines once the promised entrance signage exists.
 
 **Modes:** walking only (decided; cycling deferred).
 
@@ -170,6 +201,8 @@ only if the custom router can't keep up.
 Both live in `MapScreen.kt`:
 
 1. "Shows only cameras **mapped in OpenStreetMap**." (Real coverage is higher.)
+   The AI-video zones are approximate circles, not surveyed outlines, and the
+   panel says so.
 2. "Avoiding cameras is **not anonymity**." (And a route that conspicuously weaves
    around every lens can itself be a signal.)
 3. **"© OpenMapTiles © OpenStreetMap contributors"** — an attribution

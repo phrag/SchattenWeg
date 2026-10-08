@@ -15,10 +15,12 @@ mod exposure;
 mod osm;
 mod places;
 mod routing;
+mod zones;
 
 pub use camera::{Camera, CameraKind};
 pub use exposure::{CameraIndex, Edge, Node};
 pub use places::{Place, PlaceIndex, PlaceKind};
+pub use zones::{AiZone, ZoneStatus};
 
 use routing::Graph;
 use std::collections::HashMap;
@@ -57,6 +59,19 @@ pub struct Route {
     pub length_m: f64,
     /// Mean exposure along the route, 0..1 (fraction under surveillance).
     pub mean_exposure: f64,
+}
+
+/// The police AI-video zones, as the router scores them. The UI draws exactly
+/// these records, so the map cannot disagree with the model.
+#[uniffi::export]
+pub fn ai_zones() -> Vec<AiZone> {
+    zones::table()
+}
+
+/// When the zone table was last checked against its sources, for the UI to show.
+#[uniffi::export]
+pub fn ai_zones_as_of() -> String {
+    zones::AS_OF.to_string()
 }
 
 /// The one long-lived object the app holds. Construct it once from map data,
@@ -215,8 +230,10 @@ fn build_parts_from_pbf(pbf_path: &str) -> Result<cache::Parts, RouteError> {
 
     // The expensive part, done once: attach exposure to every edge. Scored
     // against a throwaway index so the raw camera list can be cached as-is.
+    // The AI-video zones count as watched ground too (see `zones.rs`).
     let index = CameraIndex::new(cameras.clone());
-    exposure::score_edges(&mut edges, &index, |id| {
+    let zone_index = zones::ZoneIndex::new(&zones::table());
+    exposure::score_edges(&mut edges, &index, &zone_index, |id| {
         *coords.get(&id).unwrap_or(&(0.0, 0.0))
     });
 
@@ -234,7 +251,11 @@ fn build_parts_from_pbf(pbf_path: &str) -> Result<cache::Parts, RouteError> {
 /// app storage — see [`cache::fingerprint`].
 fn source_fingerprint(pbf_path: &str) -> Option<u64> {
     let file = std::fs::File::open(pbf_path).ok()?;
-    cache::fingerprint(&mut std::io::BufReader::new(file)).ok()
+    let source = cache::fingerprint(&mut std::io::BufReader::new(file)).ok()?;
+    // The zone table is baked into every cached score, so it is part of what
+    // the cache is valid for: edit a zone and the old cache (including one
+    // pre-built into the APK) is rejected and the pass re-runs.
+    Some(source ^ zones::signature(&zones::table()))
 }
 
 /// Best-effort cache write: to a temp file then rename, so an interrupted write
@@ -251,5 +272,71 @@ fn write_cache(cache_path: &str, parts: &cache::Parts, fingerprint: u64) {
     .is_ok();
     if !ok {
         let _ = std::fs::remove_file(&tmp);
+    }
+}
+
+#[cfg(test)]
+mod zone_routing_tests {
+    //! The whole chain a zone takes to affect a route: zone table -> edge
+    //! exposure -> A*. No PBF needed, so it runs everywhere.
+    use super::*;
+    use camera::haversine_m;
+
+    /// Two ways from A to B across Kottbusser Tor's zone: straight through the
+    /// middle of it, or round the north side, well clear of the circle.
+    fn graph_across_kotti() -> Graph {
+        let pts = [
+            (1, 52.4990, 13.4150), // A, west of the zone
+            (2, 52.4990, 13.4178), // M, the zone's centre
+            (3, 52.4990, 13.4206), // B, east of the zone
+            (4, 52.5030, 13.4150), // detour, north-west
+            (5, 52.5030, 13.4206), // detour, north-east
+        ];
+        let nodes: Vec<Node> = pts
+            .iter()
+            .map(|&(id, lat, lon)| Node { id, lat, lon })
+            .collect();
+        let at = |id: u64| {
+            let n = nodes.iter().find(|n| n.id == id).unwrap();
+            (n.lat, n.lon)
+        };
+        let mut edges: Vec<Edge> = [(1, 2), (2, 3), (1, 4), (4, 5), (5, 3)]
+            .iter()
+            .map(|&(from, to)| {
+                let ((alat, alon), (blat, blon)) = (at(from), at(to));
+                Edge {
+                    from,
+                    to,
+                    length_m: haversine_m(alat, alon, blat, blon),
+                    exposure: 0.0,
+                }
+            })
+            .collect();
+        let none = CameraIndex::new(Vec::new());
+        let zones = zones::ZoneIndex::new(&zones::table());
+        exposure::score_edges(&mut edges, &none, &zones, at);
+        Graph::new(nodes, edges)
+    }
+
+    #[test]
+    fn a_zone_makes_the_straight_route_costly() {
+        let g = graph_across_kotti();
+        let direct = g.plan(1, 3, 0.0).unwrap();
+        assert_eq!(direct.node_ids, vec![1, 2, 3], "λ=0 ignores the zone");
+        assert!(direct.mean_exposure > 0.3, "{}", direct.mean_exposure);
+    }
+
+    #[test]
+    fn avoidance_routes_round_a_zone() {
+        let g = graph_across_kotti();
+        let direct = g.plan(1, 3, 0.0).unwrap();
+        let round = g.plan(1, 3, 6.0).unwrap();
+        assert_eq!(
+            round.node_ids,
+            vec![1, 4, 5, 3],
+            "λ=6 should skirt the zone"
+        );
+        assert_eq!(round.mean_exposure, 0.0);
+        assert!(round.length_m > direct.length_m);
     }
 }

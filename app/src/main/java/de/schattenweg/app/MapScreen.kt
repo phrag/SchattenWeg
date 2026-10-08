@@ -68,11 +68,15 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
+import uniffi.schattenweg_core.AiZone
 import uniffi.schattenweg_core.Camera
 import uniffi.schattenweg_core.CameraKind
 import uniffi.schattenweg_core.LatLon
 import uniffi.schattenweg_core.Place
 import uniffi.schattenweg_core.PlaceKind
+import uniffi.schattenweg_core.ZoneStatus
+import uniffi.schattenweg_core.aiZones
+import uniffi.schattenweg_core.aiZonesAsOf
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -87,6 +91,7 @@ import org.maplibre.android.geometry.LatLng as MlLatLng
 private enum class LayerGroup(val label: String, val ids: List<String>) {
     CAMERAS("Cameras", listOf("sw-camera-dots")),
     COVERAGE("Camera coverage", listOf("sw-camera-coverage-fill")),
+    AI_ZONES("AI-monitored zones", listOf(AI_ZONE_FILL, AI_ZONE_LINE)),
     LABELS("Labels", listOf("label-street", "label-transit", "label-place")),
     BUILDINGS(
         "Buildings & landuse",
@@ -100,6 +105,26 @@ private const val COVERAGE_SOURCE = "sw-camera-coverage"
 /** Layer id, needed to hit-test taps against the camera dots. */
 private const val CAMERA_LAYER = "sw-camera-dots"
 private const val ROUTE_SOURCE = "sw-route"
+
+/**
+ * Police AI-video zones. Static data, so it is handed to the source at
+ * style-load time rather than pushed from a LaunchedEffect.
+ */
+private const val AI_ZONE_SOURCE = "sw-ai-zones"
+private const val AI_ZONE_FILL = "sw-ai-zones-fill"
+private const val AI_ZONE_LINE = "sw-ai-zones-line"
+
+/**
+ * The zones come from the Rust core -- the same table its exposure pass scores
+ * routes against -- so what is drawn cannot disagree with what is avoided.
+ * Lazy: the native library loads on first use, not at class init.
+ */
+private val AI_ZONES: List<AiZone> by lazy { aiZones() }
+
+private fun ZoneStatus.label() = when (this) {
+    ZoneStatus.COMMISSIONING -> "Being set up"
+    ZoneStatus.PLANNED -> "Planned"
+}
 private const val ENDPOINT_SOURCE = "sw-endpoints"
 
 /** Berlin, Alexanderplatz — where the map opens. */
@@ -162,6 +187,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     // to rather than a value it would capture stale.
     val mapRef = remember { mutableStateOf<MapLibreMap?>(null) }
     val selectedCameraId = remember { mutableStateOf<Long?>(null) }
+    val selectedZoneId = remember { mutableStateOf<String?>(null) }
     val layersOn: SnapshotStateMap<LayerGroup, Boolean> = remember {
         mutableStateMapOf(*LayerGroup.entries.map { it to true }.toTypedArray())
     }
@@ -201,6 +227,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     }
 
     val selectedCamera = cameras.firstOrNull { it.osmId == selectedCameraId.value }
+    val selectedZone = AI_ZONES.firstOrNull { it.id == selectedZoneId.value }
 
     Box(Modifier.fillMaxSize()) {
         // The style can only be built once provisioning has told us whether
@@ -234,12 +261,30 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             )
             mapView.getMapAsync { map ->
                 map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
+                    style.addSource(GeoJsonSource(AI_ZONE_SOURCE, aiZonesGeoJson()))
                     style.addSource(GeoJsonSource(COVERAGE_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(ROUTE_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(CAMERA_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(ENDPOINT_SOURCE, EMPTY_COLLECTION))
 
-                    // What the router believes each camera sees. Drawn first
+                    // Where police AI video analysis runs or is announced.
+                    // Violet, not the cameras' red, and drawn lowest: it is a
+                    // policy zone, not a modelled field of view, and the router
+                    // does not use it.
+                    style.addLayer(
+                        FillLayer(AI_ZONE_FILL, AI_ZONE_SOURCE).withProperties(
+                            PropertyFactory.fillColor("#b48cf2"),
+                            PropertyFactory.fillOpacity(0.14f),
+                        ),
+                    )
+                    style.addLayer(
+                        LineLayer(AI_ZONE_LINE, AI_ZONE_SOURCE).withProperties(
+                            PropertyFactory.lineColor("#b48cf2"),
+                            PropertyFactory.lineWidth(2f),
+                            PropertyFactory.lineDasharray(arrayOf(2f, 2f)),
+                        ),
+                    )
+                    // What the router believes each camera sees. Drawn next
                     // so the dots and the route stay on top of it.
                     style.addLayer(
                         FillLayer("sw-camera-coverage-fill", COVERAGE_SOURCE)
@@ -382,12 +427,14 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     map.addOnMapClickListener { point ->
                         Log.d(TAG, "Map tapped at ${point.latitude},${point.longitude}")
                         selectedCameraId.value = null
+                        selectedZoneId.value = null
                         viewModel.onMapTap(LatLon(point.latitude, point.longitude))
                         true
                     }
 
                     // Long-press is the secondary gesture, split by target:
-                    // on a camera it opens the info card; on empty map it
+                    // on a camera it opens the info card, on an AI zone the zone
+                    // card (cameras win where they overlap); on empty map it
                     // undoes the last dropped routing point. Hit-test with a
                     // finger-sized box, not the exact pixel. Either way it never
                     // drops a waypoint, so it can't collide with single-tap
@@ -399,12 +446,25 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                             .firstOrNull()
                             ?.getNumberProperty("osm_id")
                             ?.toLong()
+                        val zoneHit = if (hit == null) {
+                            map.queryRenderedFeatures(touch, AI_ZONE_FILL)
+                                .firstOrNull()
+                                ?.getStringProperty("id")
+                        } else {
+                            null
+                        }
                         if (hit != null) {
                             Log.d(TAG, "Camera long-pressed: osm id $hit")
+                            selectedZoneId.value = null
                             selectedCameraId.value = hit
+                        } else if (zoneHit != null) {
+                            Log.d(TAG, "AI zone long-pressed: $zoneHit")
+                            selectedCameraId.value = null
+                            selectedZoneId.value = zoneHit
                         } else {
                             Log.d(TAG, "Long-press on empty map: undo last point")
                             selectedCameraId.value = null
+                            selectedZoneId.value = null
                             viewModel.clearLastPoint()
                         }
                         true
@@ -512,6 +572,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
             selectedCamera?.let { cam ->
                 CameraInfoCard(cam) { selectedCameraId.value = null }
+            }
+            selectedZone?.let { zone ->
+                AiZoneInfoCard(zone) { selectedZoneId.value = null }
             }
 
             // Avoidance control + the two honesty notes (see CLAUDE.md §5 — these
@@ -844,7 +907,8 @@ private fun AvoidancePanel(
                     AvoidanceSelector(selected = level, onSelect = onSelect)
                     Text(
                         "Only cameras mapped in OpenStreetMap — real coverage is " +
-                            "higher. Avoiding them is not anonymity.",
+                            "higher. Police AI-video zones (purple) are approximate " +
+                            "circles, also avoided. Avoiding them is not anonymity.",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF9AA4B2),
                     )
@@ -1006,6 +1070,56 @@ private fun CameraInfoCard(camera: Camera, onDismiss: () -> Unit) {
     }
 }
 
+/**
+ * What is known about one AI-video zone. The wording is careful on purpose:
+ * the circle is ours, the boundary is not published, and a zone says nothing
+ * about how many lenses are in it -- routing treats it as watched ground all
+ * the same.
+ */
+@Composable
+private fun AiZoneInfoCard(zone: AiZone, onDismiss: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
+    ) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                "${zone.name} \u2014 ${zone.status.label()}",
+                style = MaterialTheme.typography.titleSmall,
+                color = Color(0xFFF2F4F8),
+            )
+            Text(
+                zone.note,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFC7D0DA),
+            )
+            Text(
+                "Detects: ${zone.detects}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFC7D0DA),
+            )
+            Text(
+                "Not facial recognition, per the police. The circle is an " +
+                    "approximation: no boundary or camera positions are published. " +
+                    "Routes treat it as watched ground. Checked ${aiZonesAsOf()}.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF9AA4B2),
+            )
+            Text(
+                "Dismiss",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF7FD4A2),
+                modifier = Modifier
+                    .clickable(onClick = onDismiss)
+                    .padding(top = 4.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modifier) {
     val text = when (state) {
@@ -1072,6 +1186,17 @@ private fun camerasGeoJson(cameras: List<Camera>): String {
         """{"type":"Feature","geometry":{"type":"Point",""" +
             """"coordinates":[${c.lon},${c.lat}]},""" +
             """"properties":{"osm_id":${c.osmId}}}"""
+    }
+    return """{"type":"FeatureCollection","features":[$features]}"""
+}
+
+/** The AI-zone circles as polygons, with the id a long-press resolves back to. */
+private fun aiZonesGeoJson(): String {
+    val features = AI_ZONES.joinToString(",") { z ->
+        val coords = discRing(z.lat, z.lon, z.radiusM, steps = 48)
+            .joinToString(",") { (lat, lon) -> "[$lon,$lat]" }
+        """{"type":"Feature","geometry":{"type":"Polygon",""" +
+            """"coordinates":[[$coords]]},"properties":{"id":"${z.id}"}}"""
     }
     return """{"type":"FeatureCollection","features":[$features]}"""
 }
