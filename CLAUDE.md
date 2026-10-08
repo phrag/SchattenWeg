@@ -149,6 +149,18 @@ Done **once** at load time and baked onto edges.
 - Default range/FOV live in `camera::defaults` — deliberately conservative
   guesses; **tune against ground truth**, they are not from OSM.
 
+**AI-video zones (`AiZones.kt`) — display-only, decided.** Berlin police run
+(Kottbusser Tor) or have announced (Warschauer Brücke, Alexanderplatz, Görlitzer
+Park, plus three building pilots) AI behaviour detection on CCTV. No camera
+positions or boundaries are published — the Senate refused (Drucksache
+19/26970) — so the app draws an **approximate circle** per site, long-press for
+status/what it detects, toggled under "AI-monitored zones". Deliberately **not
+fed to the router**: a zone is policy, not a count of lenses, and inventing an
+exposure value for it would be a number with no source. Do not bump
+`cache::VERSION` for changes here. Replace the circles with surveyed outlines
+once the promised entrance signage exists, and re-check the status table
+(`AI_ZONES_AS_OF`) — it goes stale as pilots start.
+
 **Modes:** walking only (decided; cycling deferred).
 
 The map draws that same geometry: `coverageGeoJson` in `MapScreen.kt` renders
