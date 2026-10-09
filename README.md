@@ -69,12 +69,18 @@ Right now the data covers **Berlin only**.
 
 - **Shows the cameras.** Every `man_made=surveillance` camera OpenStreetMap
   knows about in Berlin, drawn on an offline map with its modelled field of
-  view. Tap one to see its details.
+  view. Long-press one to see its details.
 - **Routes around them.** Pick a start and a destination and Schattenweg finds a
   walking route that stays out of camera view where it reasonably can. A simple
   **Low / Medium / High** control sets how much extra walking you'll accept to
   dodge a lens — and when a camera-free route exists, a freshly dropped A→B pair
   takes it by default.
+- **Marks Berlin police AI-video zones.** Sites where the police run or have
+  announced AI behaviour detection on CCTV (Kottbusser Tor, Warschauer Brücke,
+  Alexanderplatz, Görlitzer Park and more) are drawn as violet dashed circles
+  and treated as watched ground when routing. No official boundaries are
+  published, so the circles are approximate. Long-press one for its status and
+  what it detects.
 - **Finds places offline.** Search streets, neighbourhoods and stations from a
   bundled index — so even typing a destination reveals nothing to anyone. Toggle
   map layers and zoom, all offline too.
@@ -86,21 +92,27 @@ Right now the data covers **Berlin only**.
 
 Once it's installed, there's nothing to set up — open it and go:
 
-1. **See the cameras.** The map opens on Berlin. Grey pins are cameras; the
-   shaded shape around each one is the area it's modelled to watch — a wedge for
-   a camera pointing one way, a circle for one that turns or points down. Pinch
-   to zoom and drag to pan. **Tap a camera** to see its type and direction.
+1. **See the cameras.** The map opens on Berlin. Red dots are cameras; the
+   faint red shape around each one is the area it's modelled to watch — a wedge
+   for a fixed camera with a known direction, a circle for a dome, a panning
+   camera or one whose direction is unknown. Violet dashed circles are police
+   AI-video zones. Pinch to zoom and drag to pan. **Long-press a camera** (or a
+   violet zone) for its details.
 2. **Pick where you're going.** Use the **search box** at the top to find a
    street, neighbourhood or station, or just **tap the map** to drop a start
-   point and then a destination.
+   point and then a destination (white dots). **Long-press empty map** to undo
+   the last point.
 3. **Get a quieter route.** Schattenweg draws a walking route that stays out of
    camera view where it reasonably can. If a camera-free route exists, it picks
-   that one for you automatically.
+   that one for you automatically. The route is drawn in green, with its length
+   and the share of it that is under watch shown at the top.
 4. **Trade detour for privacy.** The **Low / Medium / High** control decides how
    much extra walking you'll accept to avoid a lens. *Low* keeps it short;
    *High* takes bigger detours to stay hidden. Change it and the route redraws.
-5. **Tidy the view.** The layers button (**☰**) lets you turn camera coverage,
-   labels and buildings on or off, and holds the app's credits and links.
+5. **Tidy the view.** The layers button (**☰**) lets you turn cameras, camera coverage,
+   AI-monitored zones, labels and buildings & landuse on or off, and holds the
+   app's credits, version, licences and links. Hiding a layer doesn't change
+   how routes are planned.
 
 ---
 
@@ -114,8 +126,10 @@ This is the whole point of the app, so it's worth being explicit.
   talked to a server would defeat its own purpose.
 - **Fully offline.** The Berlin map, camera data, place-search index and the
   routing engine are all bundled in the app and run locally.
-- **Your location stays on the device.** Positioning uses the platform's own GPS
-  (`LocationManager`), never Google's Fused Location Provider — which routes
+- **Your location stays on the device.** The app holds no location permission
+  at all (there's no "centre on me" yet — you pick start and destination on the
+  map). If positioning is ever added it will use the platform's own GPS
+  (`LocationManager`), never Google's Fused Location Provider, which routes
   through Google's servers.
 - **No Google, no Firebase, no analytics, no ad SDKs.** The map is drawn with
   MapLibre from bundled vector tiles, not the Google Maps SDK, so no tile server
@@ -134,10 +148,13 @@ protect against — is in **[SECURITY.md](SECURITY.md)**.
 
 - The map shows only cameras **mapped in OpenStreetMap**. Real-world coverage is
   higher — treat an empty street as "unknown", not "unwatched".
+- The AI-video zones are **approximate circles**, not surveyed outlines: the
+  Berlin Senate has not published boundaries or camera positions. Some sites
+  are only planned, and routes treat all of them as watched.
 - Avoiding mapped cameras **reduces exposure; it is not anonymity.** A route that
   conspicuously weaves around every lens can itself draw attention.
 
-Both of these are shown inside the app, on purpose.
+All of these are shown inside the app, on purpose.
 
 ---
 
@@ -161,7 +178,8 @@ so rustup installs them on the first build; you don't need `rustup target add`.
    ./scripts/build_map_assets.sh     # → data/berlin-routing.osm.pbf + offline tiles
    ```
    It downloads ~70 MB from Geofabrik, verifies it against the published MD5,
-   filters it to streets + cameras, and renders offline tiles with Planetiler.
+   filters it to streets + cameras, renders offline tiles with Planetiler, and
+   pre-builds the scored routing cache so the app's first launch is fast.
    Finished files are kept, so re-running after a failure only fetches what's
    missing. Useful knobs:
 
@@ -170,6 +188,7 @@ so rustup installs them on the first build; you don't need `rustup target add`.
    | `REFRESH=1` | Discard a cached extract and fetch the **current** one, so the bundled cameras are the latest OSM has |
    | `EXTRACT_URL=<url>` | Fetch the extract from a mirror instead |
    | `SKIP_TILES=1` | Stop after the routing snapshot — the app still routes, on a plain background |
+   | `SKIP_CACHE=1` | Skip pre-building the routing cache (the app then scores on first launch) |
    | `PLANETILER_VERSION=vX.Y.Z` | Pin a different Planetiler release |
    | `RETRIES=<n>` | Download attempts per file (default 5) |
 
@@ -224,7 +243,7 @@ edge weight = length_m * (1 + λ * exposure)
 ```
 
 where `exposure ∈ [0,1]` is the fraction of a road segment inside any camera's
-modelled field of view, and λ is the avoidance strength — the app's Low / Medium
+modelled field of view or inside an AI-video zone, and λ is the avoidance strength — the app's Low / Medium
 / High control maps to λ 1 / 3 / 6. `λ=0` is a normal shortest path; larger λ
 buys quieter routes with longer detours.
 
@@ -236,17 +255,24 @@ SchattenWeg/
 │   └── src/
 │       ├── camera.rs         # camera model + field-of-view geometry
 │       ├── exposure.rs       # per-edge surveillance-exposure scoring
+│       ├── zones.rs          # police AI-video zone table (drawn and scored)
 │       ├── routing.rs        # camera-aware A*
 │       ├── osm.rs            # OSM tag → model mapping (ingest)
+│       ├── places.rs         # on-device place search index
+│       ├── cache.rs          # scored-graph snapshot for fast cold starts
 │       └── lib.rs            # the small UniFFI surface Kotlin calls
 ├── app/                      # Android: Kotlin + Jetpack Compose + MapLibre
 │   └── src/main/java/de/schattenweg/app/
 │       ├── MainActivity.kt
-│       ├── MapScreen.kt       # map + camera layer + avoidance control
+│       ├── MapAssets.kt       # copies bundled tiles + routing data to filesDir
+│       ├── MapScreen.kt       # map, camera/AI-zone layers, search, avoidance control
 │       └── RouteViewModel.kt  # bridges Compose ⇄ Rust core
 ├── scripts/
 │   ├── fetch_cameras.sh       # Overpass camera fetch (GeoJSON preview)
 │   └── build_map_assets.sh    # Geofabrik → routing snapshot + offline tiles
+├── docs/screenshots/          # README images
+├── .github/workflows/         # ci.yml (checks) + release.yml (APK releases)
+├── SECURITY.md                # threat model
 ├── CLAUDE.md                  # project context + decisions (read this first)
 └── settings.gradle.kts
 ```
@@ -260,7 +286,7 @@ publishes a versioned one. Both regenerate the map assets from a freshly
 downloaded OSM extract, so a released APK always carries the latest cameras and
 **maps and routes out of the box** — see
 [`.github/workflows/release.yml`](.github/workflows/release.yml). The in-app
-credit at the bottom of the map opens the same Releases page.
+**About** section (☰) links to the same `latest` release.
 
 The separate `CI` workflow that runs on every push builds an **asset-free**
 debug APK as a fast compile check — it renders on a plain background. The
