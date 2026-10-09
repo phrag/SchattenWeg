@@ -157,9 +157,6 @@ private const val LATEST_APK_URL =
 /** Where users report bugs and wrong data, linked from the About section. */
 private const val ISSUES_URL = "https://github.com/phrag/SchattenWeg/issues"
 
-/** The maintainer's GitHub profile, shown as "by phrag" in the About section. */
-private const val MAINTAINER_URL = "https://github.com/phrag"
-
 /** The renderer, credited in the About section (its on-map badge is disabled). */
 private const val MAPLIBRE_URL = "https://maplibre.org/"
 
@@ -827,7 +824,6 @@ private fun LayersPanel(
             )
             LinkText("Schattenweg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
             LinkText("Report a problem", ISSUES_URL)
-            LinkText("by phrag", MAINTAINER_URL)
         }
     }
 }

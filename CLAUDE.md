@@ -266,7 +266,8 @@ Both live in `MapScreen.kt`:
    `release.yml` keeping the asset name `schattenweg-latest-debug.apk`),
    a **"Rendered with MapLibre"** renderer
    credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
-   and the GitHub / "by phrag" maintainer links. The "© OpenStreetMap
+   and the project GitHub / "Report a problem" links (there is deliberately no
+   maintainer-name credit). The "© OpenStreetMap
    contributors" and "© OpenMapTiles" lines in About are **links** to their
    licences (ODbL / CC-BY), as both ask attribution to point at the terms. The
    **Open-source licences** entry opens a full-screen, fully offline view
