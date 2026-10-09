@@ -135,10 +135,13 @@ private val BERLIN = LatLng(52.5216, 13.4127)
 private const val PROJECT_URL = "https://github.com/phrag/SchattenWeg"
 
 /**
- * The rolling "latest" release (rebuilt on every push to main — see
- * release.yml): the newest APK, with the commit and OSM snapshot it carries.
+ * Direct download of the newest APK from the rolling "latest" release (rebuilt
+ * on every push to main — see release.yml). The asset name is fixed by
+ * release.yml; if it changes, change this with it. It is opened in the system
+ * browser or downloader, so the app itself still makes no network request.
  */
-private const val LATEST_RELEASE_URL = "https://github.com/phrag/SchattenWeg/releases/tag/latest"
+private const val LATEST_APK_URL =
+    "https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk"
 
 /** The maintainer's GitHub profile, shown as "by phrag" in the About section. */
 private const val MAINTAINER_URL = "https://github.com/phrag"
@@ -763,7 +766,7 @@ private fun LayersPanel(
                     color = Color(0xFF9AA4B2),
                 )
             }
-            LinkText("Get the latest version", LATEST_RELEASE_URL, Modifier.padding(top = 2.dp))
+            LinkText("Get the latest version", LATEST_APK_URL, Modifier.padding(top = 2.dp))
             // The credit lines link to their licences (ODbL / CC-BY), as both
             // ask attribution to point at the terms.
             LinkText(

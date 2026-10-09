@@ -248,9 +248,10 @@ Both live in `MapScreen.kt`:
    the tiles offline does not exempt us. If the basemap is ever regenerated
    from a different schema, update the credit to match rather than dropping it.
    The full credit lives in the layers (burger ☰) panel's **About** section,
-   alongside the app **version** with a **"Get the latest version"** link to
-   the rolling `latest` release (`LATEST_RELEASE_URL`; the README's direct APK
-   link relies on `release.yml` keeping the asset name `schattenweg-latest-debug.apk`),
+   alongside the app **version** with a **"Get the latest version"** link that
+   downloads the newest APK directly from the rolling `latest` release
+   (`LATEST_APK_URL`; it and the README's direct APK link both rely on
+   `release.yml` keeping the asset name `schattenweg-latest-debug.apk`),
    a **"Rendered with MapLibre"** renderer
    credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
    and the GitHub / "by phrag" maintainer links. The "© OpenStreetMap
