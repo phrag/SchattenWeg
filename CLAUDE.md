@@ -94,6 +94,14 @@ self-defeating.** So everything sensitive is on-device.
 - **PMTiles must be read from `filesDir`, not assets** — Android's asset
   manager can't serve the byte-range reads PMTiles needs. `MapAssets` copies
   both the tiles and the routing snapshot out on first launch.
+- **3D buildings are a view layer only, off by default.** `building-3d` in
+  `style_template.json` is a `fill-extrusion` of the basemap's own `building`
+  layer (heights from the OpenMapTiles `render_height` / `render_min_height`
+  properties, so no extra data), toggled from the layers panel, which also
+  tilts the camera (`TILT_3D_DEG`). It needs the flat buildings layer on. Its
+  heights come from the tiles' own rule, **not** the core's
+  (`osm::building_height_m`, the 6 m blocking threshold), so never colour or
+  filter it by "blocks cameras": that picture would disagree with the model.
 
 ### Security decisions (see SECURITY.md for the full threat model)
 
