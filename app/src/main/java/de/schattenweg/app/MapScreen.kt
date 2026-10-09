@@ -71,6 +71,7 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import uniffi.schattenweg_core.AiZone
 import uniffi.schattenweg_core.Camera
 import uniffi.schattenweg_core.CameraKind
+import uniffi.schattenweg_core.CoverageShape
 import uniffi.schattenweg_core.LatLon
 import uniffi.schattenweg_core.Place
 import uniffi.schattenweg_core.PlaceKind
@@ -176,6 +177,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
     val level by viewModel.level.collectAsState()
     val cameras by viewModel.cameras.collectAsState()
+    val coverage by viewModel.coverage.collectAsState()
     val route by viewModel.route.collectAsState()
     val start by viewModel.start.collectAsState()
     val end by viewModel.end.collectAsState()
@@ -275,8 +277,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
                     // Where police AI video analysis runs or is announced.
                     // Violet, not the cameras' red, and drawn lowest: it is a
-                    // policy zone, not a modelled field of view, and the router
-                    // does not use it.
+                    // policy zone, not a modelled field of view. The router
+                    // does avoid it (see zones.rs), but buildings do not
+                    // shield it the way they shield a camera's view.
                     style.addLayer(
                         FillLayer(AI_ZONE_FILL, AI_ZONE_SOURCE).withProperties(
                             PropertyFactory.fillColor("#b48cf2"),
@@ -347,11 +350,11 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         // recomposition dependencies -- so update() would run once with empty
         // data and never again. Naming the values as keys makes the dependency
         // explicit and survives the callback.
-        LaunchedEffect(cameras, route, start, end) {
+        LaunchedEffect(cameras, coverage, route, start, end) {
             // Serialising a few thousand features is real work; a whole-city
             // viewport makes it large enough to drop frames on the main thread.
             val cameraJson = withContext(Dispatchers.Default) { camerasGeoJson(cameras) }
-            val coverageJson = withContext(Dispatchers.Default) { coverageGeoJson(cameras) }
+            val coverageJson = withContext(Dispatchers.Default) { coverageGeoJson(coverage) }
             val routeJson = routeGeoJson(route?.polyline)
             val endpointJson = pointsGeoJson(listOfNotNull(start, end))
             mapView.getMapAsync { map ->
@@ -914,7 +917,9 @@ private fun AvoidancePanel(
                     AvoidanceSelector(selected = level, onSelect = onSelect)
                     Text(
                         "Only cameras mapped in OpenStreetMap — real coverage is " +
-                            "higher. Police AI-video zones (purple) are approximate " +
+                            "higher. Mapped buildings are assumed to block a " +
+                            "camera's view; trees, fences and unmapped buildings " +
+                            "do not. Police AI-video zones (purple) are approximate " +
                             "circles, also avoided. Avoiding them is not anonymity.",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF9AA4B2),
@@ -1182,7 +1187,7 @@ private fun MapLibreMap.viewportRadiusM(): Double {
  * more to build than they convey, so only the dots are drawn. The fill layer
  * also carries a minzoom for the same reason.
  */
-private const val MAX_COVERAGE_FEATURES = 1_500
+internal const val MAX_COVERAGE_FEATURES = 1_500
 
 private const val EMPTY_COLLECTION = """{"type":"FeatureCollection","features":[]}"""
 
@@ -1209,22 +1214,18 @@ private fun aiZonesGeoJson(): String {
 }
 
 /**
- * The coverage the router actually models, as polygons: a wedge for a fixed
- * camera with a known bearing, a disc for anything that can point about
- * freely or has no direction mapped. This is deliberately the same rule as
- * `camera.rs`, so what you see is what the exposure score used -- including
- * the fact that range and field of view are assumptions, not OSM data.
+ * The coverage the router actually models, as polygons. The outlines come
+ * straight from the core (`Router.coverageNear`): a wedge for a fixed camera
+ * with a known bearing, a disc for anything else, cut short where a mapped
+ * building blocks the view. There is no second copy of that rule here, so what
+ * you see is what the exposure score used -- including the fact that range,
+ * field of view and the height at which a building blocks are assumptions, not
+ * OSM data.
  */
-private fun coverageGeoJson(cameras: List<Camera>): String {
-    if (cameras.isEmpty() || cameras.size > MAX_COVERAGE_FEATURES) return EMPTY_COLLECTION
-    val features = cameras.joinToString(",") { c ->
-        val dir = c.directionDeg
-        val ring = if (c.kind == CameraKind.FIXED && dir != null) {
-            wedgeRing(c.lat, c.lon, dir, c.halfFovDeg, c.rangeM)
-        } else {
-            discRing(c.lat, c.lon, c.rangeM)
-        }
-        val coords = ring.joinToString(",") { (lat, lon) -> "[$lon,$lat]" }
+private fun coverageGeoJson(shapes: List<CoverageShape>): String {
+    if (shapes.isEmpty() || shapes.size > MAX_COVERAGE_FEATURES) return EMPTY_COLLECTION
+    val features = shapes.joinToString(",") { s ->
+        val coords = s.ring.joinToString(",") { "[${it.lon},${it.lat}]" }
         """{"type":"Feature","geometry":{"type":"Polygon",""" +
             """"coordinates":[[$coords]]},"properties":{}}"""
     }
@@ -1238,23 +1239,6 @@ private fun offsetMetres(lat: Double, lon: Double, bearingDeg: Double, distM: Do
     val dLat = distM * cos(br) / 111_320.0
     val dLon = distM * sin(br) / (111_320.0 * cos(Math.toRadians(lat)))
     return (lat + dLat) to (lon + dLon)
-}
-
-private fun wedgeRing(
-    lat: Double,
-    lon: Double,
-    dirDeg: Double,
-    halfFovDeg: Double,
-    rangeM: Double,
-    steps: Int = 12,
-): List<Pair<Double, Double>> {
-    val ring = mutableListOf(lat to lon)
-    for (i in 0..steps) {
-        val bearing = dirDeg - halfFovDeg + (2 * halfFovDeg) * i / steps
-        ring += offsetMetres(lat, lon, bearing, rangeM)
-    }
-    ring += lat to lon
-    return ring
 }
 
 private fun discRing(

@@ -210,3 +210,144 @@ fn open_falls_back_when_cache_is_corrupt() {
     let again = Router::open(fixture(), cache.path()).expect("second open");
     assert_eq!(again.camera_count(), 2);
 }
+
+// ---------------------------------------------------------------------------
+// Buildings blocking camera coverage.
+//
+// Fixture: `mini_berlin_buildings.osm.pbf` (regenerate with
+// `scripts/make_building_fixture.py`). Scenes 0-2 are an 80 m footway with a
+// dome camera 12 m north of its middle and a block between them; see the script
+// for what each block is. Scene k sits 0.01° of longitude east of scene k-1.
+// ---------------------------------------------------------------------------
+
+fn building_fixture() -> String {
+    format!(
+        "{}/tests/fixtures/mini_berlin_buildings.osm.pbf",
+        env!("CARGO_MANIFEST_DIR")
+    )
+}
+
+const M_PER_DEG_LAT: f64 = 111_195.0;
+
+/// (lat, lon) of a point `east_m`/`north_m` from the origin of `scene`.
+fn scene_point(scene: u32, east_m: f64, north_m: f64) -> LatLon {
+    let m_per_deg_lon = M_PER_DEG_LAT * 52.52_f64.to_radians().cos();
+    LatLon {
+        lat: 52.5200 + north_m / M_PER_DEG_LAT,
+        lon: 13.4000 + f64::from(scene) * 0.01 + east_m / m_per_deg_lon,
+    }
+}
+
+/// Mean exposure walking the length of a scene's street.
+fn street_exposure(router: &Router, scene: u32) -> f64 {
+    router
+        .plan(
+            scene_point(scene, -40.0, 0.0),
+            scene_point(scene, 40.0, 0.0),
+            0.0,
+        )
+        .expect("street route")
+        .mean_exposure
+}
+
+/// Distance in metres from the camera to ring point `i` of its coverage disc.
+fn ring_reach_m(router: &Router, scene: u32, i: usize) -> f64 {
+    let cam = scene_point(scene, 0.0, 12.0);
+    let shapes = router.coverage_near(cam, 5.0);
+    assert_eq!(shapes.len(), 1, "one camera in scene {scene}");
+    let p = shapes[0].ring[i];
+    let m_per_deg_lon = M_PER_DEG_LAT * 52.52_f64.to_radians().cos();
+    let dy = (p.lat - cam.lat) * M_PER_DEG_LAT;
+    let dx = (p.lon - cam.lon) * m_per_deg_lon;
+    dx.hypot(dy)
+}
+
+#[test]
+fn a_tall_building_hides_the_street_from_the_camera() {
+    let router = Router::from_pbf(building_fixture()).expect("fixture should load");
+    assert_eq!(router.camera_count(), 3);
+    assert!(
+        street_exposure(&router, 0) < 0.01,
+        "wall: {}",
+        street_exposure(&router, 0)
+    );
+}
+
+#[test]
+fn a_garage_does_not_hide_anything() {
+    let router = Router::from_pbf(building_fixture()).expect("fixture should load");
+    let e = street_exposure(&router, 1);
+    assert!(e > 0.25, "garage scene should stay watched, got {e}");
+}
+
+#[test]
+fn a_multipolygon_building_relation_blocks_too() {
+    let router = Router::from_pbf(building_fixture()).expect("fixture should load");
+    assert!(
+        street_exposure(&router, 2) < 0.01,
+        "relation: {}",
+        street_exposure(&router, 2)
+    );
+}
+
+#[test]
+fn coverage_outline_is_cut_by_the_wall_but_not_the_garage() {
+    let router = Router::from_pbf(building_fixture()).expect("fixture should load");
+    // The disc ring has 72 rays, ring[0] due north and ring[36] due south, then
+    // a closing point.
+    assert_eq!(
+        router.coverage_near(scene_point(0, 0.0, 12.0), 5.0)[0]
+            .ring
+            .len(),
+        73
+    );
+    // North of the camera there is nothing: full 20 m range in every scene.
+    for scene in 0..3 {
+        let north = ring_reach_m(&router, scene, 0);
+        assert!((north - 20.0).abs() < 0.5, "scene {scene} north {north}");
+    }
+    // South, the block's far wall is 4 m away (12 m - 8 m).
+    for scene in [0, 2] {
+        let south = ring_reach_m(&router, scene, 36);
+        assert!((south - 4.0).abs() < 0.5, "scene {scene} south {south}");
+    }
+    let south = ring_reach_m(&router, 1, 36);
+    assert!((south - 20.0).abs() < 0.5, "garage south {south}");
+}
+
+#[test]
+fn cached_router_keeps_the_buildings() {
+    let cache = TempCache::new("buildings");
+    let fresh = Router::open(building_fixture(), cache.path()).expect("first open builds");
+    let cached = Router::open(building_fixture(), cache.path()).expect("second open reads cache");
+    for scene in 0..3 {
+        assert_eq!(
+            street_exposure(&fresh, scene),
+            street_exposure(&cached, scene),
+            "scene {scene}"
+        );
+        assert_eq!(
+            ring_reach_m(&fresh, scene, 36),
+            ring_reach_m(&cached, scene, 36),
+            "scene {scene}"
+        );
+    }
+    // And it really is the cached one that is blocking, not a rebuild.
+    assert!(street_exposure(&cached, 0) < 0.01);
+}
+
+#[test]
+fn a_fixture_without_buildings_is_unchanged() {
+    // The original fixture has no building ways: scoring must be exactly the
+    // old range-and-bearing behaviour.
+    let router = Router::from_pbf(fixture()).expect("fixture should load");
+    let start = LatLon {
+        lat: 52.5200,
+        lon: 13.4000,
+    };
+    let end = LatLon {
+        lat: 52.5200,
+        lon: 13.4040,
+    };
+    assert!(router.plan(start, end, 0.0).unwrap().mean_exposure > 0.05);
+}

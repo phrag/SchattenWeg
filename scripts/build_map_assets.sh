@@ -3,8 +3,9 @@
 # build_map_assets.sh — produce everything the app bundles for offline Berlin.
 #
 #   1. data/berlin-latest.osm.pbf     full Geofabrik extract (download, ~70 MB)
-#   2. data/berlin-routing.osm.pbf    streets + surveillance nodes only —
-#                                     what the Rust core ingests on-device
+#   2. data/berlin-routing.osm.pbf    streets + buildings + surveillance nodes
+#                                     only — what the Rust core ingests
+#                                     on-device (buildings block camera view)
 #   3. data/berlin.pmtiles            vector basemap tiles (Planetiler)
 #
 # 2 and 3 are copied into app/src/main/assets/map/ for the APK build.
@@ -292,9 +293,16 @@ The download is corrupt or was tampered with. Delete both and re-run:
 fi
 
 # --- 2. Routing + camera snapshot -------------------------------------------
-echo "Filtering to walkable streets + surveillance nodes..."
+# Buildings (w/building, r/building) are kept because a wall hides the street
+# behind it from a camera: the core clips each camera's coverage by them (see
+# core/src/occluders.rs). tags-filter pulls in the nodes of every kept way and
+# the member ways of every kept relation, which is what multipolygon buildings
+# need. The core prunes the buildings to those near a camera at load time and
+# the cache stores only that subset, but this file carries all of them -- if the
+# APK size matters, check the size of $ROUTING after this step.
+echo "Filtering to walkable streets + buildings + surveillance nodes..."
 osmium tags-filter --overwrite "$RAW" \
-    w/highway n/man_made=surveillance \
+    w/highway w/building r/building n/man_made=surveillance \
     -o "$ROUTING" \
     || die "osmium could not filter $RAW (is the file complete?)"
 osmium fileinfo -e "$ROUTING" | sed -n 's/^  Number of/  /p' || true

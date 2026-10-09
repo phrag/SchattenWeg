@@ -7,12 +7,14 @@
 //! changes between launches. This module lets the first build write the scored
 //! result to disk so later launches read it back instead of re-deriving it.
 //!
-//! What is cached is only the four flat inputs the `Router` is assembled from —
-//! `nodes`, the *scored* `edges`, `cameras` and `places`. Every index and grid
-//! (`Graph` adjacency, the camera grid, the place search list, the id→coord
-//! map) is cheap to rebuild from those with the same constructors the PBF path
-//! uses, so none of it is serialised. The edge exposure — the expensive bit —
-//! lives in `edges`, so reloading skips the pass entirely.
+//! What is cached is only the five flat inputs the `Router` is assembled from —
+//! `nodes`, the *scored* `edges`, `cameras`, `places` and the `occluders`
+//! (outlines of buildings that block a camera's view, already filtered to those
+//! near a camera). Every index and grid (`Graph` adjacency, the camera and
+//! occluder grids, the place search list, the id→coord map) is cheap to rebuild
+//! from those with the same constructors the PBF path uses, so none of it is
+//! serialised. The edge exposure — the expensive bit — lives in `edges`, so
+//! reloading skips the pass entirely.
 //!
 //! Format: a small hand-rolled little-endian binary blob. No serialisation
 //! dependency, and full control over versioning and validation — the header
@@ -23,6 +25,7 @@
 
 use crate::camera::{Camera, CameraKind};
 use crate::exposure::{Edge, Node};
+use crate::occluders::Ring;
 use crate::places::{Place, PlaceKind};
 use std::io::{self, Read, Write};
 
@@ -35,9 +38,9 @@ const MAGIC: &[u8; 4] = b"SWGC";
 /// sampling in `exposure.rs`). The cached edge exposures are only as current as
 /// the code that wrote them; bumping the version invalidates every old cache so
 /// a stale score can never outlive the logic that produced it.
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 
-/// The four flat vectors a `Router` is assembled from. This is exactly what the
+/// The five flat vectors a `Router` is assembled from. This is exactly what the
 /// PBF ingest produces (with edges already scored) and exactly what the cache
 /// round-trips.
 #[derive(Debug)]
@@ -46,6 +49,8 @@ pub struct Parts {
     pub edges: Vec<Edge>,
     pub cameras: Vec<Camera>,
     pub places: Vec<Place>,
+    /// Building outlines that block camera coverage, as `(lat, lon)` rings.
+    pub occluders: Vec<Ring>,
 }
 
 /// Serialise `parts` to `w`, tagged with `fingerprint` (see [`fingerprint`]).
@@ -94,6 +99,15 @@ pub fn write<W: Write>(w: &mut W, parts: &Parts, fingerprint: u64) -> io::Result
         w.write_all(&[place_kind_tag(p.kind)])?;
         write_f64(w, p.lat)?;
         write_f64(w, p.lon)?;
+    }
+
+    write_u64(w, parts.occluders.len() as u64)?;
+    for ring in &parts.occluders {
+        write_u32(w, ring.len() as u32)?;
+        for &(lat, lon) in ring {
+            write_f64(w, lat)?;
+            write_f64(w, lon)?;
+        }
     }
 
     Ok(())
@@ -178,11 +192,23 @@ pub fn read<R: Read>(r: &mut R, expected_fingerprint: u64) -> io::Result<Parts> 
         });
     }
 
+    let ring_count = read_len(r)?;
+    let mut occluders = Vec::with_capacity(ring_count.min(MAX_PREALLOC));
+    for _ in 0..ring_count {
+        let n = read_u32(r)? as usize;
+        let mut ring = Vec::with_capacity(n.min(MAX_RING_PREALLOC));
+        for _ in 0..n {
+            ring.push((read_f64(r)?, read_f64(r)?));
+        }
+        occluders.push(ring);
+    }
+
     Ok(Parts {
         nodes,
         edges,
         cameras,
         places,
+        occluders,
     })
 }
 
@@ -215,6 +241,9 @@ pub fn fingerprint<R: Read>(r: &mut R) -> io::Result<u64> {
 /// for a huge `Vec` before the reader hits the truncated data and errors. The
 /// vectors still grow past this if the data is genuinely that large.
 const MAX_PREALLOC: usize = 1 << 20;
+
+/// The same cap for one building ring's vertices (real ones have a few dozen).
+const MAX_RING_PREALLOC: usize = 1 << 12;
 
 fn read_len<R: Read>(r: &mut R) -> io::Result<usize> {
     Ok(read_u64(r)? as usize)
@@ -349,6 +378,10 @@ mod tests {
                 lat: 52.521,
                 lon: 13.413,
             }],
+            occluders: vec![
+                vec![(52.5050, 13.4050), (52.5052, 13.4050), (52.5052, 13.4053)],
+                vec![(52.5060, 13.4060); 5],
+            ],
         }
     }
 
@@ -381,6 +414,7 @@ mod tests {
             assert_eq!(a.name, b.name);
             assert_eq!(a.kind, b.kind);
         }
+        assert_eq!(back.occluders, parts.occluders);
     }
 
     #[test]
@@ -395,7 +429,27 @@ mod tests {
             edges: vec![],
             cameras: vec![],
             places: vec![],
+            occluders: vec![],
         });
+    }
+
+    #[test]
+    fn rejects_the_previous_format_version() {
+        // A v3 cache holds scores computed without buildings; it must never be
+        // read back as current.
+        let mut buf = Vec::new();
+        write(&mut buf, &sample(), 1).unwrap();
+        buf[4..8].copy_from_slice(&3u32.to_le_bytes());
+        let err = read(&mut &buf[..], 1).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn rejects_truncation_inside_the_building_section() {
+        let mut buf = Vec::new();
+        write(&mut buf, &sample(), 1).unwrap();
+        buf.truncate(buf.len() - 5);
+        assert!(read(&mut &buf[..], 1).is_err());
     }
 
     #[test]

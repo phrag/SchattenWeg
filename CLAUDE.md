@@ -47,6 +47,9 @@ Our ingest paths (see `scripts/` and `core/src/osm.rs`):
 | `camera:type=fixed\|dome\|panning` | cone vs disc coverage |
 | `camera:direction=<deg or compass>` | cone centre bearing (0=N, 90=E) |
 | `surveillance=public\|outdoor\|traffic` | context/filtering, not required |
+| `building=*` (not `no`) | closed way, or `type=multipolygon` relation with closed outer ways: **blocks a camera's view** if tall enough (below) |
+| `height` → `building:height` → `building:levels`×3.2 m → 9 m | the one height chain (`osm::building_height_m`); `building=shed\|garage\|garages\|carport\|roof\|hut\|kiosk\|greenhouse\|cabin` default to 3 m instead |
+| `min_height` ≥ mount height | dropped: raised parts (skybridges) don't block a sight line |
 
 Decided: routes avoid **cameras only** — ALPR reads plates, guards aren't
 lenses. Coverage is uneven — OSM has only a fraction of real cameras. **The UI
@@ -150,6 +153,32 @@ camera covers it **or** it lies inside a police AI-video zone (below).
 - Default range/FOV live in `camera::defaults` — deliberately conservative
   guesses; **tune against ground truth**, they are not from OSM.
 
+**Buildings block the view — decided** (`core/src/occluders.rs`). A point is
+covered by a camera only if it is in range and in the cone **and** the sight
+line from the camera does not cross the outline of a building tall enough to
+hide it (`defaults::occluder_min_height_m()`, 6 m — a guess, tuned on the high
+side because wrongly treating a building as transparent only *over*-reports
+exposure, the safe direction). Every exemption errs the same way:
+- the camera's **own building** (inside the footprint or within 3 m of its
+  wall — cameras sit on facades) is ignored for that camera;
+- a building **containing the sample point** is ignored, so passages and
+  `highway=corridor` edges stay watched;
+- a sight line that merely grazes a vertex isn't blocked;
+- inner rings are ignored (courtyards are solid; a camera inside one is "in its
+  own building");
+- **AI-video zones are not occluded** — they are policy circles, not lines of
+  sight.
+
+The ingest (`osm::load_buildings`) keeps only blocking buildings within camera
+range of some camera, which is lossless for scoring and keeps the cache small.
+Multipolygon relations are supported only where the outer rings are closed
+ways; outers made of several open ways are skipped. The routing snapshot must
+therefore contain buildings: `build_map_assets.sh` filters
+`w/highway w/building r/building n/man_made=surveillance`. **Measure the
+snapshot size when regenerating** — it carries every Berlin building even
+though the core only keeps those near cameras. Changing the 6 m threshold, the
+height chain or the exemptions changes every cached score: bump `cache::VERSION`.
+
 **AI-video zones (`core/src/zones.rs`) — routed around, decided.** Berlin police
 run (Kottbusser Tor) or have announced (Warschauer Brücke, Alexanderplatz,
 Görlitzer Park, plus three building pilots) AI behaviour detection on CCTV. No
@@ -182,12 +211,17 @@ camera positions or boundaries are published — the Senate refused (Drucksache
 
 **Modes:** walking only (decided; cycling deferred).
 
-The map draws that same geometry: `coverageGeoJson` in `MapScreen.kt` renders
-a wedge for a fixed camera with a bearing and a disc for everything else,
-deliberately mirroring `camera.rs`. It is there so the user can see what the
-exposure score was actually computed from. **If the coverage rule in
-`camera.rs` changes, change the drawing with it** — a picture that disagrees
-with the model is worse than no picture, because it looks authoritative.
+The map draws that same geometry, and the **core is the only place it is
+computed**: `Router::coverage_near` (→ `OccluderIndex::coverage_ring`) returns
+each camera's wedge (fixed camera with a bearing) or disc (everything else),
+cut short where a building blocks the view, and `coverageGeoJson` in
+`MapScreen.kt` just serialises those rings. It is there so the user can see what
+the exposure score was actually computed from. The ring is traced with a fixed
+number of rays (48 across a cone, 72 round a disc), so it can differ from the
+scoring test by a metre or two along a shadow edge. There used to be a
+Kotlin copy of the wedge/disc rule; it was removed because a picture that
+disagrees with the model is worse than no picture — it looks authoritative.
+Don't reintroduce one.
 
 Alternatives considered and **not** chosen: GraphHopper custom model, Valhalla
 `avoid_polygons`. Rejected in favour of the hand-rolled Rust pass because it
@@ -201,8 +235,10 @@ only if the custom router can't keep up.
 Both live in `MapScreen.kt`:
 
 1. "Shows only cameras **mapped in OpenStreetMap**." (Real coverage is higher.)
-   The AI-video zones are approximate circles, not surveyed outlines, and the
-   panel says so.
+   Only *mapped* buildings are assumed to block a camera's view; trees, fences,
+   vehicles and unmapped buildings are not modelled, so real exposure can be
+   higher still. The AI-video zones are approximate circles, not surveyed
+   outlines, and the panel says so.
 2. "Avoiding cameras is **not anonymity**." (And a route that conspicuously weaves
    around every lens can itself be a signal.)
 3. **"© OpenMapTiles © OpenStreetMap contributors"** — an attribution
@@ -262,6 +298,15 @@ Track progress against this list when picking the project back up:
       exercises the whole pipeline on a synthetic PBF fixture.
 - [x] `scripts/build_map_assets.sh`: Geofabrik (md5-verified) → filtered
       snapshot + Planetiler offline tiles.
+- [x] Buildings occlude camera coverage (`core/src/occluders.rs`,
+      `osm::load_buildings`, cache v4, `Router::coverage_near`; map draws the
+      core's clipped outlines). Unit- and fixture-tested
+      (`scripts/make_building_fixture.py` → `mini_berlin_buildings.osm.pbf`;
+      regenerate with `osmium` on PATH or `pip install osmium`).
+      **Not yet run against the real Berlin extract or on a device:** snapshot
+      size growth, build/launch time and the before/after exposure on the 4251
+      cameras are unmeasured, and the Kotlin change has not been compiled
+      outside CI.
 - [x] Android app: Gradle + cargo-ndk + UniFFI bindings + MapLibre map screen
       (offline tiles, camera layer, tap-to-route, Low/Medium/High avoidance
       control, in-app GitHub credit).
@@ -300,8 +345,9 @@ Berlin extract (style loads in ~80 ms by comparison) — that gap is the one-off
 exposure pass over every edge. That pass is now **cached**: `Router::open`
 (`core/src/cache.rs`) reloads the scored graph from a small binary snapshot
 next to the extract in `filesDir` instead of re-deriving it, so every cold
-start *after the first* skips the pass. The cache is only the four flat inputs
-the router is assembled from (nodes, scored edges, cameras, places); its header
+start *after the first* skips the pass. The cache is only the five flat inputs
+the router is assembled from (nodes, scored edges, cameras, places, and the
+blocking-building outlines near cameras); its header
 carries a format/logic `VERSION` and a fingerprint of the source extract, and
 any mismatch or malformed byte makes it fall back to the PBF. **Pre-built at asset-build time:**
 `build_map_assets.sh` now runs `core/examples/build_cache.rs` (same `Router::open`
@@ -312,7 +358,8 @@ change when the asset is copied); a missing/stale cache still falls back to the
 PBF. `SKIP_CACHE=1` skips the step. Remaining lever: stop bundling the `.pbf`,
 and `rstar` in place of the grids.
 **When the scoring/geometry logic changes** (`camera.rs` coverage, the
-`defaults` table, `exposure.rs` sampling), bump `cache::VERSION` so stale
+`defaults` table, `exposure.rs` sampling, `occluders.rs`, the building height
+chain in `osm.rs`), bump `cache::VERSION` so stale
 scores can't outlive the code that produced them.
 
 **Deliberately deferred:** cycling profile, location puck ("centre on me"),
