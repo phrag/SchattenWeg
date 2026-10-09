@@ -37,6 +37,7 @@ the permission to reach the internet.
 - [Honesty about the limits](#honesty-about-the-limits)
 - [Build from source](#build-from-source) — for developers
 - [Contributing](#contributing)
+- [Report a problem](#report-a-problem)
 - [Credits](#credits) &middot; [Licence](#licence)
 
 ---
@@ -315,6 +316,13 @@ configured for Compose in `.editorconfig`. Format before pushing — CI's
 ```bash
 ktlint -F "app/src/main/java/de/schattenweg/**/*.kt" "*.gradle.kts" "app/*.gradle.kts"
 ```
+
+## Report a problem
+
+Found a bug, a wrong route or a missing camera? Please
+[open an issue](https://github.com/phrag/SchattenWeg/issues) (the app's menu has
+the same **Report a problem** link). Don't include your location or other
+personal details.
 
 ## Credits
 
