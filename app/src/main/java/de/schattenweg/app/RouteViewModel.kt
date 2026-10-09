@@ -53,11 +53,11 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
      * Camera-avoidance strength, bound to a three-way control in the UI. Each
      * level is a fixed λ into the router's `length * (1 + λ * exposure)` cost
      * (see CLAUDE.md §4): [AvoidanceLevel.LOW] barely detours, [AvoidanceLevel.HIGH]
-     * takes big detours to dodge lenses. Starts at [AvoidanceLevel.MEDIUM]; an
-     * auto-plan may raise it to HIGH when that is what buys a camera-free route
-     * (see [plan]).
+     * takes big detours to dodge lenses. Starts at [AvoidanceLevel.HIGH], and
+     * every new route is reset to HIGH again (see [plan]); a manual pick only
+     * applies to the route it was made on.
      */
-    val level = MutableStateFlow(AvoidanceLevel.MEDIUM)
+    val level = MutableStateFlow(AvoidanceLevel.HIGH)
 
     /** Tapped start point, then destination; a third tap starts over. */
     val start = MutableStateFlow<LatLon?>(null)
@@ -191,43 +191,32 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
             }
         } else {
             end.value = point
-            plan(preferClean = true)
+            plan(freshPair = true)
         }
     }
 
     /**
      * Plan (or re-plan) between the two taps at the current [level].
      *
-     * When [preferClean] is set — the default for a freshly completed A→B pair,
-     * not for a manual level change — and the chosen level still leaves the
-     * walker under watch, the planner retries at the strongest level and adopts
-     * that route if it is camera-free (0% exposure), raising [level] to match so
-     * the control reflects what was actually used. The rule: given the choice,
-     * always default to a route with no camera coverage. A manual level change
-     * passes `preferClean = false`, so Low/Medium stay honoured even when a
-     * longer camera-free route exists.
+     * When [freshPair] is set — a newly completed A→B pair, not a manual level
+     * change — [level] is first reset to [AvoidanceLevel.HIGH], whatever was
+     * picked for the previous route (so a level chosen before the destination
+     * exists is overwritten too). The rule: every new route starts at the
+     * strongest avoidance, which also gives a camera-free route whenever one
+     * exists. A manual level change passes `freshPair = false`, so Low/Medium
+     * are honoured exactly for that route even when a longer camera-free one
+     * exists.
      */
-    fun plan(preferClean: Boolean = false) {
+    fun plan(freshPair: Boolean = false) {
         val r = router ?: return
         val s = start.value ?: return
         val e = end.value ?: return
+        if (freshPair) level.value = AvoidanceLevel.HIGH
         viewModelScope.launch {
             _state.value = UiState.Planning
             _state.value = try {
-                val chosen = level.value
-                var planned = withContext(Dispatchers.Default) { r.plan(s, e, chosen.lambda) }
-                if (preferClean && planned.meanExposure > 0.0 && chosen != AvoidanceLevel.HIGH) {
-                    // The two endpoints already routed, so the strict retry can
-                    // only differ in the path it picks, not in whether one
-                    // exists -- but guard it anyway so a surprise failure keeps
-                    // the good route we already have rather than erroring out.
-                    val strict = withContext(Dispatchers.Default) {
-                        runCatching { r.plan(s, e, AvoidanceLevel.HIGH.lambda) }.getOrNull()
-                    }
-                    if (strict != null && strict.meanExposure <= 0.0) {
-                        planned = strict
-                        level.value = AvoidanceLevel.HIGH
-                    }
+                val planned = withContext(Dispatchers.Default) {
+                    r.plan(s, e, level.value.lambda)
                 }
                 route.value = planned
                 UiState.Routed(planned)
@@ -299,13 +288,13 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
     /** Set the start from a search result; re-plan if a destination exists. */
     fun setStart(point: LatLon) {
         start.value = point
-        if (end.value != null) plan(preferClean = true)
+        if (end.value != null) plan(freshPair = true)
     }
 
     /** Set the destination from a search result; re-plan if a start exists. */
     fun setEnd(point: LatLon) {
         end.value = point
-        if (start.value != null) plan(preferClean = true)
+        if (start.value != null) plan(freshPair = true)
     }
 
     /** Clear the search box and its results (e.g. after picking a result). */

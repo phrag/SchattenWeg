@@ -596,9 +596,8 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 level = level,
                 onSelect = {
                     viewModel.level.value = it
-                    // A manual pick is honoured as-is: no auto-escalation to a
-                    // camera-free route (that is only the default for a freshly
-                    // dropped A→B pair).
+                    // A manual pick is honoured as-is for this route; it is
+                    // reset to High when the next A→B pair is dropped.
                     viewModel.plan()
                 },
                 collapsed = panelCollapsed.value,
