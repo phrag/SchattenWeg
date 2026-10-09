@@ -13,7 +13,7 @@
 
 use std::f64::consts::PI;
 
-const EARTH_RADIUS_M: f64 = 6_371_000.0;
+pub(crate) const EARTH_RADIUS_M: f64 = 6_371_000.0;
 
 /// The physical mounting / movement class of a camera, derived from OSM tags
 /// (`camera:type`, `surveillance:type`). This decides whether we treat its
@@ -123,6 +123,17 @@ pub mod defaults {
     /// Half field-of-view in degrees for directional cameras.
     pub fn half_fov_deg(_kind: CameraKind) -> f64 {
         30.0 // i.e. a 60° cone
+    }
+
+    /// A building only blocks a camera's view if it is at least this tall, in
+    /// metres. Cameras are typically bracketed 3–6 m up, so a single-storey
+    /// shed or garage does not hide anything behind it. A guess, like the rest
+    /// of this table, and deliberately on the high side: a building wrongly
+    /// treated as transparent only *over*-reports exposure, which is the safe
+    /// direction for this app. Changing it changes every cached score, so bump
+    /// `cache::VERSION` with it.
+    pub fn occluder_min_height_m() -> f64 {
+        6.0
     }
 }
 

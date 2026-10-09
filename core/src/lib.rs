@@ -12,6 +12,7 @@
 mod cache;
 mod camera;
 mod exposure;
+mod occluders;
 mod osm;
 mod places;
 mod routing;
@@ -19,6 +20,7 @@ mod zones;
 
 pub use camera::{Camera, CameraKind};
 pub use exposure::{CameraIndex, Edge, Node};
+pub use occluders::OccluderIndex;
 pub use places::{Place, PlaceIndex, PlaceKind};
 pub use zones::{AiZone, ZoneStatus};
 
@@ -59,6 +61,16 @@ pub struct Route {
     pub length_m: f64,
     /// Mean exposure along the route, 0..1 (fraction under surveillance).
     pub mean_exposure: f64,
+}
+
+/// One camera's coverage outline, with the parts hidden behind buildings cut
+/// away. A closed ring (first point repeated last). The UI draws exactly this,
+/// so the map shows the same field of view the exposure score was computed from.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CoverageShape {
+    /// OSM node id of the camera, matching `Camera::osm_id`.
+    pub osm_id: i64,
+    pub ring: Vec<LatLon>,
 }
 
 /// The police AI-video zones, as the router scores them. The UI draws exactly
@@ -170,6 +182,23 @@ impl Router {
         self.cameras.near(at.lat, at.lon, radius_m)
     }
 
+    /// The coverage outline of every camera within `radius_m` of a point — a
+    /// wedge for a fixed camera with a bearing, a disc otherwise, cut short
+    /// where a building blocks the view. Same cameras as [`Router::cameras_near`].
+    pub fn coverage_near(&self, at: LatLon, radius_m: f64) -> Vec<CoverageShape> {
+        self.cameras
+            .coverage_near(at.lat, at.lon, radius_m)
+            .into_iter()
+            .map(|(osm_id, ring)| CoverageShape {
+                osm_id,
+                ring: ring
+                    .into_iter()
+                    .map(|(lat, lon)| LatLon { lat, lon })
+                    .collect(),
+            })
+            .collect()
+    }
+
     /// How many cameras the core knows about (for a status line / honesty note).
     pub fn camera_count(&self) -> u64 {
         self.cameras.len() as u64
@@ -201,12 +230,13 @@ impl Router {
             edges,
             cameras,
             places,
+            occluders,
         } = parts;
         let coords: HashMap<u64, (f64, f64)> =
             nodes.iter().map(|n| (n.id, (n.lat, n.lon))).collect();
         Self {
             graph: Graph::new(nodes, edges),
-            cameras: CameraIndex::new(cameras),
+            cameras: CameraIndex::new(cameras).with_occluders(OccluderIndex::new(occluders)),
             places: PlaceIndex::new(places),
             coords,
         }
@@ -223,15 +253,18 @@ fn build_parts_from_pbf(pbf_path: &str) -> Result<cache::Parts, RouteError> {
         reason: e.to_string(),
     };
     let cameras = osm::load_cameras(pbf_path).map_err(load)?;
+    let occluders = osm::load_buildings(pbf_path, &cameras).map_err(load)?;
     let network = osm::load_network(pbf_path).map_err(load)?;
     let (nodes, mut edges, places) = (network.nodes, network.edges, network.places);
 
     let coords: HashMap<u64, (f64, f64)> = nodes.iter().map(|n| (n.id, (n.lat, n.lon))).collect();
 
     // The expensive part, done once: attach exposure to every edge. Scored
-    // against a throwaway index so the raw camera list can be cached as-is.
-    // The AI-video zones count as watched ground too (see `zones.rs`).
-    let index = CameraIndex::new(cameras.clone());
+    // against a throwaway index so the raw camera and building lists can be
+    // cached as-is. A camera does not cover what a building hides from it, and
+    // the AI-video zones count as watched ground (see `zones.rs`) regardless.
+    let index =
+        CameraIndex::new(cameras.clone()).with_occluders(OccluderIndex::new(occluders.clone()));
     let zone_index = zones::ZoneIndex::new(&zones::table());
     exposure::score_edges(&mut edges, &index, &zone_index, |id| {
         *coords.get(&id).unwrap_or(&(0.0, 0.0))
@@ -242,6 +275,7 @@ fn build_parts_from_pbf(pbf_path: &str) -> Result<cache::Parts, RouteError> {
         edges,
         cameras,
         places,
+        occluders,
     })
 }
 

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.schattenweg_core.Camera
+import uniffi.schattenweg_core.CoverageShape
 import uniffi.schattenweg_core.LatLon
 import uniffi.schattenweg_core.Place
 import uniffi.schattenweg_core.Route
@@ -64,6 +65,13 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Cameras to draw for the current viewport. */
     val cameras = MutableStateFlow<List<Camera>>(emptyList())
+
+    /**
+     * What those cameras can see: each outline already cut short where a
+     * building blocks the view, computed by the core from the same geometry the
+     * exposure score used. Empty when too many cameras are in view to draw.
+     */
+    val coverage = MutableStateFlow<List<CoverageShape>>(emptyList())
 
     /** The most recent successfully planned route, or null. */
     val route = MutableStateFlow<Route?>(null)
@@ -243,13 +251,24 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
         lastCameraQuery = centre to radiusM
         val r = router ?: return
         viewModelScope.launch {
-            val found = withContext(Dispatchers.Default) { r.camerasNear(centre, radiusM) }
+            val (found, shapes) = withContext(Dispatchers.Default) {
+                val near = r.camerasNear(centre, radiusM)
+                // Past the draw cap the outlines are never shown, so don't
+                // spend the ray-casting on them.
+                val outlines = if (near.size <= MAX_COVERAGE_FEATURES) {
+                    r.coverageNear(centre, radiusM)
+                } else {
+                    emptyList()
+                }
+                near to outlines
+            }
             Log.d(
                 TAG,
                 "cameras within ${radiusM.toInt()} m of " +
                     "${centre.lat},${centre.lon}: ${found.size}",
             )
             cameras.value = found
+            coverage.value = shapes
         }
     }
 

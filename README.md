@@ -95,7 +95,8 @@ Once it's installed, there's nothing to set up — open it and go:
 1. **See the cameras.** The map opens on Berlin. Red dots are cameras; the
    faint red shape around each one is the area it's modelled to watch — a wedge
    for a fixed camera with a known direction, a circle for a dome, a panning
-   camera or one whose direction is unknown. Violet dashed circles are police
+   camera or one whose direction is unknown. Mapped buildings cut the shape
+   short, since a camera can't see through a wall. Violet dashed circles are police
    AI-video zones. Pinch to zoom and drag to pan. **Long-press a camera** (or a
    violet zone) for its details.
 2. **Pick where you're going.** Use the **search box** at the top to find a
@@ -148,6 +149,10 @@ protect against — is in **[SECURITY.md](SECURITY.md)**.
 
 - The map shows only cameras **mapped in OpenStreetMap**. Real-world coverage is
   higher — treat an empty street as "unknown", not "unwatched".
+- Only **mapped buildings** are assumed to block a camera's view (and only ones
+  tall enough to, roughly two storeys up). Trees, fences, vehicles and
+  unmapped buildings aren't modelled, so a street that looks hidden behind a
+  building may still be watched.
 - The AI-video zones are **approximate circles**, not surveyed outlines: the
   Berlin Senate has not published boundaries or camera positions. Some sites
   are only planned, and routes treat all of them as watched.

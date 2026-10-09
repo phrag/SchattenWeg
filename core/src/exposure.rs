@@ -13,6 +13,7 @@
 //! a comment for clarity.
 
 use crate::camera::{haversine_m, Camera};
+use crate::occluders::OccluderIndex;
 use crate::zones::ZoneIndex;
 use std::collections::HashMap;
 
@@ -114,11 +115,17 @@ const M_PER_DEG_LAT: f64 = 111_320.0;
 /// point lives in the 3×3 block of cells around it. At Berlin's camera density
 /// this is plenty; swap in an R-tree (`rstar`) later if a city ever gets
 /// pathological.
+///
+/// It also carries the building outlines that block cameras' view (see
+/// `occluders.rs`), so "covered" always means "in range, in the cone, **and**
+/// not behind a wall". Without buildings (the default) it is the plain
+/// range-and-bearing test.
 pub struct CameraIndex {
     cameras: Vec<Camera>,
     grid: HashMap<(i32, i32), Vec<u32>>,
     cell_lat_deg: f64,
     cell_lon_deg: f64,
+    occluders: OccluderIndex,
 }
 
 impl CameraIndex {
@@ -152,7 +159,14 @@ impl CameraIndex {
             grid,
             cell_lat_deg,
             cell_lon_deg,
+            occluders: OccluderIndex::empty(),
         }
+    }
+
+    /// Let these buildings block the cameras' view.
+    pub fn with_occluders(mut self, occluders: OccluderIndex) -> Self {
+        self.occluders = occluders;
+        self
     }
 
     pub fn len(&self) -> usize {
@@ -164,23 +178,35 @@ impl CameraIndex {
     }
 
     /// True if any camera covers this point. The hot inner call of the
-    /// exposure pass: only the 3×3 grid neighbourhood is tested.
+    /// exposure pass: only the 3×3 grid neighbourhood is tested, and the
+    /// (comparatively costly) wall test runs only for cameras that already
+    /// cover the point by range and bearing.
     pub fn any_covers(&self, lat: f64, lon: f64) -> bool {
         let ci = (lat / self.cell_lat_deg).floor() as i32;
         let cj = (lon / self.cell_lon_deg).floor() as i32;
         for di in -1..=1 {
             for dj in -1..=1 {
                 if let Some(bucket) = self.grid.get(&(ci + di, cj + dj)) {
-                    if bucket
-                        .iter()
-                        .any(|&i| self.cameras[i as usize].covers(lat, lon))
-                    {
+                    if bucket.iter().any(|&i| {
+                        let cam = &self.cameras[i as usize];
+                        cam.covers(lat, lon)
+                            && !self.occluders.blocks((cam.lat, cam.lon), (lat, lon))
+                    }) {
                         return true;
                     }
                 }
             }
         }
         false
+    }
+
+    /// The coverage outline of every camera within `radius_m` of a point, with
+    /// walls cut out — what the map draws. Same cameras as [`Self::near`].
+    pub fn coverage_near(&self, lat: f64, lon: f64, radius_m: f64) -> Vec<(i64, Vec<(f64, f64)>)> {
+        self.near(lat, lon, radius_m)
+            .into_iter()
+            .map(|cam| (cam.osm_id, self.occluders.coverage_ring(&cam)))
+            .collect()
     }
 
     /// All cameras within `radius_m` of a point — handy for the map layer
@@ -270,6 +296,94 @@ mod tests {
             &ZoneIndex::empty(),
         );
         assert!(e > 0.0 && e <= 1.0);
+    }
+
+    /// A building 10..20 m north of (52.5200, 13.4050), 10 m wide.
+    fn block_north_of_camera() -> OccluderIndex {
+        let m_lat = 1.0 / 111_195.0;
+        let m_lon = m_lat / 52.52_f64.to_radians().cos();
+        let ring = |n: f64, e: f64| (52.5200 + n * m_lat, 13.4050 + e * m_lon);
+        OccluderIndex::new(vec![vec![
+            ring(10.0, -5.0),
+            ring(20.0, -5.0),
+            ring(20.0, 5.0),
+            ring(10.0, 5.0),
+        ]])
+    }
+
+    /// A 60 m east-west street 25 m north of a dome camera, with the building
+    /// from `block_north_of_camera` standing between them.
+    fn street_behind_the_block() -> (f64, f64, f64, f64, f64) {
+        let m_lat = 1.0 / 111_195.0;
+        let m_lon = m_lat / 52.52_f64.to_radians().cos();
+        let lat = 52.5200 + 25.0 * m_lat;
+        (
+            lat,
+            13.4050 - 30.0 * m_lon,
+            lat,
+            13.4050 + 30.0 * m_lon,
+            60.0,
+        )
+    }
+
+    #[test]
+    fn a_building_between_camera_and_street_lowers_exposure() {
+        let (alat, alon, blat, blon, len) = street_behind_the_block();
+        let open = CameraIndex::new(vec![dome_at(52.5200, 13.4050, 30.0)]);
+        let walled = CameraIndex::new(vec![dome_at(52.5200, 13.4050, 30.0)])
+            .with_occluders(block_north_of_camera());
+        let zones = ZoneIndex::empty();
+        let before = edge_exposure(alat, alon, blat, blon, len, &open, &zones);
+        let after = edge_exposure(alat, alon, blat, blon, len, &walled, &zones);
+        assert!(before > 0.4, "open street is watched: {before}");
+        assert!(after < before, "{after} should be below {before}");
+        // The building hides the middle of the street, not the ends.
+        assert!(after > 0.0, "the street ends are still in view: {after}");
+    }
+
+    #[test]
+    fn buildings_off_the_sight_line_change_nothing() {
+        let (alat, alon, blat, blon, len) = street_behind_the_block();
+        let m_lat = 1.0 / 111_195.0;
+        let far = OccluderIndex::new(vec![vec![
+            (52.5200 - 100.0 * m_lat, 13.4000),
+            (52.5200 - 100.0 * m_lat, 13.4001),
+            (52.5200 - 110.0 * m_lat, 13.4001),
+        ]]);
+        let open = CameraIndex::new(vec![dome_at(52.5200, 13.4050, 30.0)]);
+        let with_far = CameraIndex::new(vec![dome_at(52.5200, 13.4050, 30.0)]).with_occluders(far);
+        let zones = ZoneIndex::empty();
+        assert_eq!(
+            edge_exposure(alat, alon, blat, blon, len, &open, &zones),
+            edge_exposure(alat, alon, blat, blon, len, &with_far, &zones),
+        );
+    }
+
+    #[test]
+    fn walls_do_not_hide_an_ai_zone() {
+        // Zones are policy circles, not lines of sight: a building inside one
+        // must not lower the exposure it contributes.
+        let (alat, alon, blat, blon, len) = street_behind_the_block();
+        let cams = CameraIndex::new(Vec::new()).with_occluders(block_north_of_camera());
+        let zone = zone_100m(52.5200, 13.4050);
+        assert_eq!(
+            edge_exposure(alat, alon, blat, blon, len, &cams, &zone),
+            1.0
+        );
+    }
+
+    #[test]
+    fn coverage_near_returns_a_clipped_ring_per_camera() {
+        let idx = CameraIndex::new(vec![dome_at(52.5200, 13.4050, 30.0)])
+            .with_occluders(block_north_of_camera());
+        let shapes = idx.coverage_near(52.5200, 13.4050, 50.0);
+        assert_eq!(shapes.len(), 1);
+        let (_, ring) = &shapes[0];
+        // The disc ring starts due north. Unclipped it would reach 30 m; the
+        // wall 10 m up stops it there.
+        let due_north_m = (ring[0].0 - 52.5200) * 111_195.0;
+        assert!((due_north_m - 10.0).abs() < 0.5, "{due_north_m}");
+        assert!(idx.coverage_near(52.6, 13.5, 50.0).is_empty());
     }
 
     /// A one-zone index centred on a made-up point, radius 100 m.
