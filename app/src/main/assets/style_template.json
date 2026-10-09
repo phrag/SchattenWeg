@@ -32,6 +32,16 @@
       "minzoom": 12,
       "paint": { "fill-color": "#262d38", "fill-outline-color": "#333c49" } },
 
+    { "id": "building-3d", "type": "fill-extrusion", "source": "omt", "source-layer": "building",
+      "minzoom": 14,
+      "layout": { "visibility": "none" },
+      "paint": {
+        "fill-extrusion-color": "#323b4a",
+        "fill-extrusion-height": ["to-number", ["coalesce", ["get", "render_height"], 8]],
+        "fill-extrusion-base": ["to-number", ["coalesce", ["get", "render_min_height"], 0]],
+        "fill-extrusion-opacity": 0.85
+      } },
+
     { "id": "rail", "type": "line", "source": "omt", "source-layer": "transportation",
       "filter": ["==", "class", "rail"],
       "paint": { "line-color": "#3a4453", "line-width": { "stops": [[11, 0.6], [16, 1.5]] } } },
