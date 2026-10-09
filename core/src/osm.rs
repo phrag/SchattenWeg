@@ -39,11 +39,17 @@ impl From<osmpbf::Error> for OsmError {
 ///   * `surveillance:type=camera`     — vs `guard` / `ALPR`
 ///   * `camera:type=fixed|dome|panning`
 ///   * `camera:direction=<deg>`       — compass bearing, cone centre
-///   * `surveillance=public|outdoor|indoor|traffic`
+///   * `surveillance=public|outdoor|indoor|traffic` — `indoor` cameras are
+///     dropped: they watch the inside of a building (a lobby, a museum), not
+///     the street, and modelling them as a disc would hide walls' worth of
+///     street behind them.
 pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(&str, &str)]) -> Option<Camera> {
     let get = |k: &str| tags.iter().find(|(tk, _)| *tk == k).map(|&(_, v)| v);
 
     if get("man_made") != Some("surveillance") {
+        return None;
+    }
+    if get("surveillance") == Some("indoor") {
         return None;
     }
     // Only actual cameras. Absence of surveillance:type is treated as a camera
@@ -618,6 +624,28 @@ mod tests {
     fn drops_non_camera_surveillance() {
         let tags = [("man_made", "surveillance"), ("surveillance:type", "guard")];
         assert!(camera_from_tags(1, 0.0, 0.0, &tags).is_none());
+    }
+
+    #[test]
+    fn drops_indoor_cameras_but_keeps_the_rest() {
+        let with = |surveillance: &'static str| {
+            camera_from_tags(
+                1,
+                52.52,
+                13.40,
+                &[
+                    ("man_made", "surveillance"),
+                    ("surveillance:type", "camera"),
+                    ("surveillance", surveillance),
+                ],
+            )
+        };
+        assert!(with("indoor").is_none());
+        for kept in ["outdoor", "public", "traffic"] {
+            assert!(with(kept).is_some(), "{kept} cameras must stay");
+        }
+        // No `surveillance` tag at all: still a camera, as before.
+        assert!(camera_from_tags(1, 0.0, 0.0, &[("man_made", "surveillance")]).is_some());
     }
 
     #[test]

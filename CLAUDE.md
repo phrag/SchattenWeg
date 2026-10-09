@@ -46,7 +46,8 @@ Our ingest paths (see `scripts/` and `core/src/osm.rs`):
 | `surveillance:type=camera` | keep; drop `guard` / `ALPR` (not lenses to dodge) |
 | `camera:type=fixed\|dome\|panning` | cone vs disc coverage |
 | `camera:direction=<deg or compass>` | cone centre bearing (0=N, 90=E) |
-| `surveillance=public\|outdoor\|traffic` | context/filtering, not required |
+| `surveillance=indoor` | **dropped**: it watches the inside of a building, not the street (a disc would also cut through walls) |
+| `surveillance=public\|outdoor\|traffic` (or untagged) | kept; context only, not required |
 | `building=*` (not `no`) | closed way, or `type=multipolygon` relation with closed outer ways: **blocks a camera's view** if tall enough (below) |
 | `height` → `building:height` → `building:levels`×3.2 m → 9 m | the one height chain (`osm::building_height_m`); `building=shed\|garage\|garages\|carport\|roof\|hut\|kiosk\|greenhouse\|cabin` default to 3 m instead |
 | `min_height` ≥ mount height | dropped: raised parts (skybridges) don't block a sight line |
@@ -129,14 +130,17 @@ The core takes λ as a continuous f64 and always will — but the **UI no longer
 exposes a raw slider**. It offers three presets, Low/Medium/High → λ 1/3/6
 (`AvoidanceLevel` in `RouteViewModel.kt`); three named choices are easier to
 reason about than a bare number. Two behaviours ride on top, both decided:
-- A **freshly dropped A→B pair defaults to the camera-free route when one
-  exists**: if the chosen level still leaves exposure > 0, the planner retries
-  at the strongest level and adopts that route if it is 0% exposure, raising the
-  displayed level to match (`plan(preferClean = true)`).
-- A **manual** level change is honoured exactly (`preferClean = false`), so
-  Low/Medium still buy a shorter, more-exposed route even when a longer
-  camera-free one exists. Without that, the lower presets would be dead controls
-  whenever a clean route was reachable.
+- **Every new route starts at High**: the control launches on High, and a
+  freshly dropped A→B pair (second map tap, or a search start/end completing the
+  pair) resets the level to High whatever was picked for the previous route
+  (`plan(freshPair = true)`). High is the strongest preset, so this also gives
+  the camera-free route whenever one exists. (This replaced an earlier "start at
+  Medium, then retry at High if the route is still watched" rule.)
+- A **manual** level change is honoured exactly for that route
+  (`plan()`, `freshPair = false`), so Low/Medium still buy a shorter,
+  more-exposed route even when a longer camera-free one exists. Without that,
+  the lower presets would be dead controls. It does not stick: the next new
+  route is back on High.
 
 Multiplicative-on-length keeps units in metres-equivalent, which keeps the A*
 straight-line heuristic **admissible** for `λ ≥ 0`.
@@ -248,9 +252,10 @@ Both live in `MapScreen.kt`:
    the tiles offline does not exempt us. If the basemap is ever regenerated
    from a different schema, update the credit to match rather than dropping it.
    The full credit lives in the layers (burger ☰) panel's **About** section,
-   alongside the app **version** with a **"Get the latest version"** link to
-   the rolling `latest` release (`LATEST_RELEASE_URL`; the README's direct APK
-   link relies on `release.yml` keeping the asset name `schattenweg-latest-debug.apk`),
+   alongside the app **version** with a **"Get the latest version"** link that
+   downloads the newest APK directly from the rolling `latest` release
+   (`LATEST_APK_URL`; it and the README's direct APK link both rely on
+   `release.yml` keeping the asset name `schattenweg-latest-debug.apk`),
    a **"Rendered with MapLibre"** renderer
    credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
    and the GitHub / "by phrag" maintainer links. The "© OpenStreetMap

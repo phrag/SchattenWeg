@@ -74,8 +74,8 @@ Right now the data covers **Berlin only**.
 - **Routes around them.** Pick a start and a destination and Schattenweg finds a
   walking route that stays out of camera view where it reasonably can. A simple
   **Low / Medium / High** control sets how much extra walking you'll accept to
-  dodge a lens — and when a camera-free route exists, a freshly dropped A→B pair
-  takes it by default.
+  dodge a lens. Every new route starts on **High**, so when a camera-free route
+  exists you get it by default; lower the setting if you'd rather walk less.
 - **Marks Berlin police AI-video zones.** Sites where the police run or have
   announced AI behaviour detection on CCTV (Kottbusser Tor, Warschauer Brücke,
   Alexanderplatz, Görlitzer Park and more) are drawn as violet dashed circles
