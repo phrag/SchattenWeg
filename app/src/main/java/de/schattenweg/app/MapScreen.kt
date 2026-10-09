@@ -139,6 +139,9 @@ private const val PROJECT_URL = "https://github.com/phrag/SchattenWeg"
  */
 private const val LATEST_RELEASE_URL = "https://github.com/phrag/SchattenWeg/releases/tag/latest"
 
+/** Where users report bugs and wrong data, linked from the About section. */
+private const val ISSUES_URL = "https://github.com/phrag/SchattenWeg/issues"
+
 /** The maintainer's GitHub profile, shown as "by phrag" in the About section. */
 private const val MAINTAINER_URL = "https://github.com/phrag"
 
@@ -778,6 +781,7 @@ private fun LayersPanel(
                 modifier = Modifier.clickable { onOpenLicenses() },
             )
             LinkText("Schattenweg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
+            LinkText("Report a problem", ISSUES_URL)
             LinkText("by phrag", MAINTAINER_URL)
         }
     }
