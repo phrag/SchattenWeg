@@ -38,7 +38,7 @@ const MAGIC: &[u8; 4] = b"SWGC";
 /// sampling in `exposure.rs`). The cached edge exposures are only as current as
 /// the code that wrote them; bumping the version invalidates every old cache so
 /// a stale score can never outlive the logic that produced it.
-const VERSION: u32 = 4;
+const VERSION: u32 = 5;
 
 /// The five flat vectors a `Router` is assembled from. This is exactly what the
 /// PBF ingest produces (with edges already scored) and exactly what the cache
@@ -435,11 +435,11 @@ mod tests {
 
     #[test]
     fn rejects_the_previous_format_version() {
-        // A v3 cache holds scores computed without buildings; it must never be
-        // read back as current.
+        // A v4 cache was scored with indoor cameras still in the set; it must
+        // never be read back as current.
         let mut buf = Vec::new();
         write(&mut buf, &sample(), 1).unwrap();
-        buf[4..8].copy_from_slice(&3u32.to_le_bytes());
+        buf[4..8].copy_from_slice(&4u32.to_le_bytes());
         let err = read(&mut &buf[..], 1).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }

@@ -46,7 +46,8 @@ Our ingest paths (see `scripts/` and `core/src/osm.rs`):
 | `surveillance:type=camera` | keep; drop `guard` / `ALPR` (not lenses to dodge) |
 | `camera:type=fixed\|dome\|panning` | cone vs disc coverage |
 | `camera:direction=<deg or compass>` | cone centre bearing (0=N, 90=E) |
-| `surveillance=public\|outdoor\|traffic` | context/filtering, not required |
+| `surveillance=indoor` | **dropped**: it watches the inside of a building, not the street (a disc would also cut through walls) |
+| `surveillance=public\|outdoor\|traffic` (or untagged) | kept; context only, not required |
 | `building=*` (not `no`) | closed way, or `type=multipolygon` relation with closed outer ways: **blocks a camera's view** if tall enough (below) |
 | `height` → `building:height` → `building:levels`×3.2 m → 9 m | the one height chain (`osm::building_height_m`); `building=shed\|garage\|garages\|carport\|roof\|hut\|kiosk\|greenhouse\|cabin` default to 3 m instead |
 | `min_height` ≥ mount height | dropped: raised parts (skybridges) don't block a sight line |
