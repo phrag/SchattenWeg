@@ -94,11 +94,15 @@ self-defeating.** So everything sensitive is on-device.
 - **PMTiles must be read from `filesDir`, not assets** — Android's asset
   manager can't serve the byte-range reads PMTiles needs. `MapAssets` copies
   both the tiles and the routing snapshot out on first launch.
-- **3D buildings are a view layer only, off by default.** `building-3d` in
+- **3D buildings are a view layer only, on by default.** `building-3d` in
   `style_template.json` is a `fill-extrusion` of the basemap's own `building`
   layer (heights from the OpenMapTiles `render_height` / `render_min_height`
-  properties, so no extra data), toggled from the layers panel, which also
-  tilts the camera (`TILT_3D_DEG`). It needs the flat buildings layer on. Its
+  properties, so no extra data), toggled from the layers panel. Because it is on
+  from launch the map **opens tilted** (`TILT_3D_DEG`), and switching the layer
+  off levels the camera again. It needs the flat buildings layer on. Layers
+  drawn after an extrusion paint over it, so the AI-zone layers are inserted
+  just *below* `building-3d` (they would otherwise tint the towers); the
+  coverage, route and camera layers stay above. Its
   heights come from the tiles' own rule, **not** the core's
   (`osm::building_height_m`, the 6 m blocking threshold), so never colour or
   filter it by "blocks cameras": that picture would disagree with the model.
@@ -266,7 +270,8 @@ Both live in `MapScreen.kt`:
    `release.yml` keeping the asset name `schattenweg-latest-debug.apk`),
    a **"Rendered with MapLibre"** renderer
    credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
-   and the GitHub / "by phrag" maintainer links. The "© OpenStreetMap
+   and the project GitHub / "Report a problem" links (there is deliberately no
+   maintainer-name credit). The "© OpenStreetMap
    contributors" and "© OpenMapTiles" lines in About are **links** to their
    licences (ODbL / CC-BY), as both ask attribution to point at the terms. The
    **Open-source licences** entry opens a full-screen, fully offline view

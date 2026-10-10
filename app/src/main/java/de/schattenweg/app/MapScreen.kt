@@ -64,6 +64,7 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
+import org.maplibre.android.style.layers.Layer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
@@ -87,13 +88,10 @@ import org.maplibre.android.geometry.LatLng as MlLatLng
  * The toggleable layer groups and the style-layer ids each owns. Camera dots
  * and coverage are our own overlay layers; labels and buildings are the
  * basemap's, named to match style_template.json. Keep these in sync with the
- * style. [BUILDINGS_3D] starts off and only shows while [BUILDINGS] is on too.
+ * style. Every group starts on; [BUILDINGS_3D] only shows while [BUILDINGS] is
+ * on too.
  */
-private enum class LayerGroup(
-    val label: String,
-    val ids: List<String>,
-    val defaultOn: Boolean = true,
-) {
+private enum class LayerGroup(val label: String, val ids: List<String>) {
     CAMERAS("Cameras", listOf("sw-camera-dots")),
     COVERAGE("Camera coverage", listOf("sw-camera-coverage-fill")),
     AI_ZONES("AI-monitored zones", listOf(AI_ZONE_FILL, AI_ZONE_LINE)),
@@ -102,13 +100,16 @@ private enum class LayerGroup(
         "Buildings & landuse",
         listOf("building", "landuse-residential", "landcover", "park"),
     ),
-    BUILDINGS_3D("3D buildings", listOf(BUILDING_3D_LAYER), defaultOn = false),
+    BUILDINGS_3D("3D buildings", listOf(BUILDING_3D_LAYER)),
 }
 
 /** The basemap's extruded-building layer (see style_template.json). */
 private const val BUILDING_3D_LAYER = "building-3d"
 
-/** Camera tilt, in degrees, when 3D buildings are switched on. */
+/**
+ * Camera tilt, in degrees, when 3D buildings are on: the map opens at this tilt
+ * (3D is on by default) and switching the layer off levels it again.
+ */
 private const val TILT_3D_DEG = 50.0
 
 private const val CAMERA_SOURCE = "sw-cameras"
@@ -156,9 +157,6 @@ private const val LATEST_APK_URL =
 
 /** Where users report bugs and wrong data, linked from the About section. */
 private const val ISSUES_URL = "https://github.com/phrag/SchattenWeg/issues"
-
-/** The maintainer's GitHub profile, shown as "by phrag" in the About section. */
-private const val MAINTAINER_URL = "https://github.com/phrag"
 
 /** The renderer, credited in the About section (its on-map badge is disabled). */
 private const val MAPLIBRE_URL = "https://maplibre.org/"
@@ -214,7 +212,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val selectedCameraId = remember { mutableStateOf<Long?>(null) }
     val selectedZoneId = remember { mutableStateOf<String?>(null) }
     val layersOn: SnapshotStateMap<LayerGroup, Boolean> = remember {
-        mutableStateMapOf(*LayerGroup.entries.map { it to it.defaultOn }.toTypedArray())
+        mutableStateMapOf(*LayerGroup.entries.map { it to true }.toTypedArray())
     }
     val panelOpen = remember { mutableStateOf(false) }
     // The full-screen open-source-licences view (BSD/OFL texts bundled offline).
@@ -296,14 +294,25 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     // Violet, not the cameras' red, and drawn lowest: it is a
                     // policy zone, not a modelled field of view. The router
                     // does avoid it (see zones.rs), but buildings do not
-                    // shield it the way they shield a camera's view.
-                    style.addLayer(
+                    // shield it the way they shield a camera's view. It goes
+                    // just under the 3D buildings: a layer drawn after an
+                    // extrusion paints over it, which tinted the towers inside
+                    // the circle. With no basemap there is no extrusion layer,
+                    // so it simply goes on top.
+                    fun addUnder3d(layer: Layer) {
+                        if (style.getLayer(BUILDING_3D_LAYER) != null) {
+                            style.addLayerBelow(layer, BUILDING_3D_LAYER)
+                        } else {
+                            style.addLayer(layer)
+                        }
+                    }
+                    addUnder3d(
                         FillLayer(AI_ZONE_FILL, AI_ZONE_SOURCE).withProperties(
                             PropertyFactory.fillColor("#b48cf2"),
                             PropertyFactory.fillOpacity(0.14f),
                         ),
                     )
-                    style.addLayer(
+                    addUnder3d(
                         LineLayer(AI_ZONE_LINE, AI_ZONE_SOURCE).withProperties(
                             PropertyFactory.lineColor("#b48cf2"),
                             PropertyFactory.lineWidth(2f),
@@ -423,8 +432,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
         // Tilt in step with the 3D toggle: extruded buildings are pointless seen
         // straight down, and a flat view is wanted again once they are off. The
-        // first run is skipped so launching doesn't touch the camera; after that
-        // the user is free to tilt by hand, and only a toggle moves it again.
+        // first run is skipped because the map already opens tilted (see the
+        // camera setup below); after that the user is free to tilt by hand, and
+        // only a toggle moves it again.
         val threeDOn = layersOn[LayerGroup.BUILDINGS_3D] == true &&
             layersOn[LayerGroup.BUILDINGS] != false
         val firstTiltPass = remember { mutableStateOf(true) }
@@ -467,6 +477,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     map.cameraPosition = CameraPosition.Builder()
                         .target(BERLIN)
                         .zoom(14.0)
+                        .tilt(TILT_3D_DEG)
                         .build()
 
                     // A single tap always routes — it drops the start, then the
@@ -617,7 +628,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xCCC8D0DC),
                 modifier = Modifier
-                    .background(Color(0x66000000), RoundedCornerShape(4.dp))
+                    // Near-opaque, like the panels: a see-through chip lets map
+                    // labels (large when the map is tilted) run through the credit.
+                    .background(Color(0xF210141A), RoundedCornerShape(4.dp))
                     .clickable { panelOpen.value = true }
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
@@ -827,7 +840,6 @@ private fun LayersPanel(
             )
             LinkText("Schattenweg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
             LinkText("Report a problem", ISSUES_URL)
-            LinkText("by phrag", MAINTAINER_URL)
         }
     }
 }

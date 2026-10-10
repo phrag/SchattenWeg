@@ -114,9 +114,10 @@ Once it's installed, there's nothing to set up — open it and go:
 5. **Tidy the view.** The layers button (**☰**) lets you turn cameras, camera coverage,
    AI-monitored zones, labels and buildings & landuse on or off, and holds the
    app's credits, version, licences and links. Hiding a layer doesn't change
-   how routes are planned. **3D buildings** is off by default: switch it on and
-   the map tilts so the buildings stand up (drag two fingers to tilt it
-   yourself). It is only a view; it doesn't change what blocks a camera's view.
+   how routes are planned. **3D buildings** is on by default, so the map opens
+   tilted with the buildings standing up (drag two fingers to tilt it yourself).
+   Switch it off to level the map back out. It is only a view; it doesn't change
+   what blocks a camera's view.
 
 ---
 
