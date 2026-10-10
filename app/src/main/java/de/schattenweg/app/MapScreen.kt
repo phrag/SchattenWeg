@@ -88,13 +88,10 @@ import org.maplibre.android.geometry.LatLng as MlLatLng
  * The toggleable layer groups and the style-layer ids each owns. Camera dots
  * and coverage are our own overlay layers; labels and buildings are the
  * basemap's, named to match style_template.json. Keep these in sync with the
- * style. [BUILDINGS_3D] starts off and only shows while [BUILDINGS] is on too.
+ * style. Every group starts on; [BUILDINGS_3D] only shows while [BUILDINGS] is
+ * on too.
  */
-private enum class LayerGroup(
-    val label: String,
-    val ids: List<String>,
-    val defaultOn: Boolean = true,
-) {
+private enum class LayerGroup(val label: String, val ids: List<String>) {
     CAMERAS("Cameras", listOf("sw-camera-dots")),
     COVERAGE("Camera coverage", listOf("sw-camera-coverage-fill")),
     AI_ZONES("AI-monitored zones", listOf(AI_ZONE_FILL, AI_ZONE_LINE)),
@@ -103,13 +100,16 @@ private enum class LayerGroup(
         "Buildings & landuse",
         listOf("building", "landuse-residential", "landcover", "park"),
     ),
-    BUILDINGS_3D("3D buildings", listOf(BUILDING_3D_LAYER), defaultOn = false),
+    BUILDINGS_3D("3D buildings", listOf(BUILDING_3D_LAYER)),
 }
 
 /** The basemap's extruded-building layer (see style_template.json). */
 private const val BUILDING_3D_LAYER = "building-3d"
 
-/** Camera tilt, in degrees, when 3D buildings are switched on. */
+/**
+ * Camera tilt, in degrees, when 3D buildings are on: the map opens at this tilt
+ * (3D is on by default) and switching the layer off levels it again.
+ */
 private const val TILT_3D_DEG = 50.0
 
 private const val CAMERA_SOURCE = "sw-cameras"
@@ -212,7 +212,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val selectedCameraId = remember { mutableStateOf<Long?>(null) }
     val selectedZoneId = remember { mutableStateOf<String?>(null) }
     val layersOn: SnapshotStateMap<LayerGroup, Boolean> = remember {
-        mutableStateMapOf(*LayerGroup.entries.map { it to it.defaultOn }.toTypedArray())
+        mutableStateMapOf(*LayerGroup.entries.map { it to true }.toTypedArray())
     }
     val panelOpen = remember { mutableStateOf(false) }
     // The full-screen open-source-licences view (BSD/OFL texts bundled offline).
@@ -432,8 +432,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
         // Tilt in step with the 3D toggle: extruded buildings are pointless seen
         // straight down, and a flat view is wanted again once they are off. The
-        // first run is skipped so launching doesn't touch the camera; after that
-        // the user is free to tilt by hand, and only a toggle moves it again.
+        // first run is skipped because the map already opens tilted (see the
+        // camera setup below); after that the user is free to tilt by hand, and
+        // only a toggle moves it again.
         val threeDOn = layersOn[LayerGroup.BUILDINGS_3D] == true &&
             layersOn[LayerGroup.BUILDINGS] != false
         val firstTiltPass = remember { mutableStateOf(true) }
@@ -476,6 +477,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     map.cameraPosition = CameraPosition.Builder()
                         .target(BERLIN)
                         .zoom(14.0)
+                        .tilt(TILT_3D_DEG)
                         .build()
 
                     // A single tap always routes — it drops the start, then the
