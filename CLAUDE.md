@@ -98,7 +98,10 @@ self-defeating.** So everything sensitive is on-device.
   `style_template.json` is a `fill-extrusion` of the basemap's own `building`
   layer (heights from the OpenMapTiles `render_height` / `render_min_height`
   properties, so no extra data), toggled from the layers panel, which also
-  tilts the camera (`TILT_3D_DEG`). It needs the flat buildings layer on. Its
+  tilts the camera (`TILT_3D_DEG`). It needs the flat buildings layer on. Layers
+  drawn after an extrusion paint over it, so the AI-zone layers are inserted
+  just *below* `building-3d` (they would otherwise tint the towers); the
+  coverage, route and camera layers stay above. Its
   heights come from the tiles' own rule, **not** the core's
   (`osm::building_height_m`, the 6 m blocking threshold), so never colour or
   filter it by "blocks cameras": that picture would disagree with the model.

@@ -64,6 +64,7 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
+import org.maplibre.android.style.layers.Layer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
@@ -293,14 +294,25 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     // Violet, not the cameras' red, and drawn lowest: it is a
                     // policy zone, not a modelled field of view. The router
                     // does avoid it (see zones.rs), but buildings do not
-                    // shield it the way they shield a camera's view.
-                    style.addLayer(
+                    // shield it the way they shield a camera's view. It goes
+                    // just under the 3D buildings: a layer drawn after an
+                    // extrusion paints over it, which tinted the towers inside
+                    // the circle. With no basemap there is no extrusion layer,
+                    // so it simply goes on top.
+                    fun addUnder3d(layer: Layer) {
+                        if (style.getLayer(BUILDING_3D_LAYER) != null) {
+                            style.addLayerBelow(layer, BUILDING_3D_LAYER)
+                        } else {
+                            style.addLayer(layer)
+                        }
+                    }
+                    addUnder3d(
                         FillLayer(AI_ZONE_FILL, AI_ZONE_SOURCE).withProperties(
                             PropertyFactory.fillColor("#b48cf2"),
                             PropertyFactory.fillOpacity(0.14f),
                         ),
                     )
-                    style.addLayer(
+                    addUnder3d(
                         LineLayer(AI_ZONE_LINE, AI_ZONE_SOURCE).withProperties(
                             PropertyFactory.lineColor("#b48cf2"),
                             PropertyFactory.lineWidth(2f),
@@ -614,7 +626,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xCCC8D0DC),
                 modifier = Modifier
-                    .background(Color(0x66000000), RoundedCornerShape(4.dp))
+                    // Near-opaque, like the panels: a see-through chip lets map
+                    // labels (large when the map is tilted) run through the credit.
+                    .background(Color(0xF210141A), RoundedCornerShape(4.dp))
                     .clickable { panelOpen.value = true }
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
