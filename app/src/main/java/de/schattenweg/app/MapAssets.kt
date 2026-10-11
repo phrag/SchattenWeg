@@ -94,17 +94,33 @@ object MapAssets {
         if (name !in bundled) return null
         val out = File(outDir, name)
 
-        // Size of the packaged asset, used to detect a partial or stale copy.
-        // openFd only works for uncompressed entries (see the noCompress block
-        // in build.gradle.kts); if it ever fails, re-copy rather than trust a
-        // file we can't verify.
+        // Is the copy in filesDir current? Two ways to tell.
+        //  * Stored (uncompressed) entries: openFd gives the packaged size, and
+        //    a copy of any other size is partial or stale.
+        //  * Compressed entries (the graph cache; see the noCompress block in
+        //    build.gradle.kts): openFd refuses them, and the size can't be read
+        //    without inflating, so a stamp file beside the copy records which
+        //    install it came from. Every install or update changes
+        //    lastUpdateTime, so a new APK always re-extracts, and an unchanged
+        //    one never does. Without this, a 110 MB file would be re-copied on
+        //    every launch.
         val assetSize = runCatching {
             context.assets.openFd("$ASSET_DIR/$name").use { it.length }
         }.getOrNull()
+        val stamp = File(outDir, "$name.stamp")
+        val install = installStamp(context)
 
-        if (assetSize == null || out.length() != assetSize) {
+        val upToDate = if (assetSize != null) {
+            out.length() == assetSize
+        } else {
+            install != null && out.exists() &&
+                runCatching { stamp.readText() }.getOrNull() == install
+        }
+
+        if (!upToDate) {
             // Copy to a temporary file first: an interrupted copy must not
             // leave a truncated file that looks complete on the next launch.
+            stamp.delete()
             val tmp = File(outDir, "$name.part")
             context.assets.open("$ASSET_DIR/$name").use { input ->
                 tmp.outputStream().use { input.copyTo(it) }
@@ -113,9 +129,21 @@ object MapAssets {
                 tmp.delete()
                 return null
             }
+            // Written last, so a copy that didn't finish is never stamped.
+            if (assetSize == null && install != null) {
+                runCatching { stamp.writeText(install) }
+            }
         }
         return out
     }
+
+    /** Changes whenever the app is installed or updated; null if unreadable. */
+    private fun installStamp(context: Context): String? = runCatching {
+        context.packageManager
+            .getPackageInfo(context.packageName, 0)
+            .lastUpdateTime
+            .toString()
+    }.getOrNull()
 
     /** The MapLibre style JSON, pointing at the local tiles and glyphs. */
     fun styleJson(context: Context, provisioned: Provisioned): String {

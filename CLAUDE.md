@@ -91,6 +91,17 @@ self-defeating.** So everything sensitive is on-device.
   data fault. `-PmaplibreBackend=opengl` selects
   `org.maplibre.gl:android-sdk-opengl` for those; Vulkan stays the default
   for real devices.
+- **APK size (measured on v0.2.0, 308 MB):** graph cache 110 MB, tiles 82 MB,
+  OSM snapshot 59 MB, MapLibre native libs 49 MB (four ABIs). The tiles and the
+  `.pbf` are already compressed, so they stay `noCompress` (size checked with
+  `openFd`). The graph cache is *not* `noCompress` (110 → ~46 MB); `MapAssets`
+  tells a current copy by a `.stamp` file holding the install's
+  `lastUpdateTime`. The release build is **arm64-v8a only** (`abiFilters`);
+  debug keeps x86_64 for emulators. Bundled assets are also copied to `filesDir`,
+  so on-device storage is roughly APK + extracted data. Remaining levers: drop
+  the bundled `.pbf` (the cache fingerprint is a content hash of it, so that
+  needs a build-time fingerprint instead), a more compact cache format, and
+  trimming the tile zoom range / bounding box.
 - **PMTiles must be read from `filesDir`, not assets** — Android's asset
   manager can't serve the byte-range reads PMTiles needs. `MapAssets` copies
   both the tiles and the routing snapshot out on first launch.
