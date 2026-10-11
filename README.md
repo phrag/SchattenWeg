@@ -13,9 +13,7 @@ the permission to reach the internet.
 <p align="center">
   <a href="https://github.com/phrag/SchattenWeg/releases/latest"><b>⬇&nbsp;Download the latest release</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/phrag/SchattenWeg/releases/tag/latest">development build</a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/phrag/SchattenWeg/releases">all versions</a>
+  <a href="https://github.com/phrag/SchattenWeg/releases">all releases</a>
 </p>
 
 <p align="center">
@@ -43,27 +41,32 @@ the permission to reach the internet.
 
 ## Download & install
 
-1. **[Download the latest release](https://github.com/phrag/SchattenWeg/releases/latest)**
-   — the newest signed version, with the APK attached. Its release notes say
-   which commit and OSM snapshot it carries.
-   - Want the newest unreleased code instead? The
-     **[development build](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest.apk)**
-     is rebuilt on every push to `main` (unreleased code, same release key)
-     ([notes](https://github.com/phrag/SchattenWeg/releases/tag/latest)).
-   - Want an older version? Every tagged build is on the
-     **[Releases page](https://github.com/phrag/SchattenWeg/releases)**.
-2. Copy it to your phone and tap it. Android will ask you to allow installing
-   from this source — that's the normal sideloading prompt for an app that
-   isn't from a store.
-3. Open **Schattenweg**. No sign-in, no setup, no network — it's ready.
+**On your Android phone:**
 
-**Requirements:** Android 10 (API 29) or newer. Works on de-Googled devices such
-as **GrapheneOS** — there are no Google Play Services to miss.
+1. **[Tap here to open the latest release](https://github.com/phrag/SchattenWeg/releases/latest)**,
+   scroll to **Assets** and tap the file ending in **`.apk`**. It is about
+   300 MB because the whole Berlin map is inside, so use Wi-Fi.
+2. When it has downloaded, tap **Open** (or open it from your **Downloads**).
+   If your browser warns that the file "may be harmful", choose **Download
+   anyway** — that is the standard message for any app that isn't from a store.
+3. Android will say it can't install apps from this source. Tap **Settings**,
+   switch on **Allow from this source**, then press **Back**.
+4. Tap **Install**, then **Open**. If *Play Protect* shows a warning, choose
+   **More details → Install anyway**.
 
-> Versioned releases (`v*` tags) are signed with the Schattenweg release key;
-> compare the certificate fingerprint in [SECURITY.md](SECURITY.md). The rolling
-> `latest` development build is signed with the same key. You can also
-> [build from source](#build-from-source).
+That's it: no account, no sign-in, no setup, and the app never connects to the
+internet. You can turn "Allow from this source" off again afterwards.
+
+On a computer instead? Download the same file and copy it to your phone, or
+open this page on your phone.
+
+**Requirements:** Android 10 or newer. Works on de-Googled phones such as
+**GrapheneOS** — there are no Google Play Services to miss. Older versions are
+on the [Releases page](https://github.com/phrag/SchattenWeg/releases).
+
+> **Want to check it's genuine?** Every release is signed with the Schattenweg
+> release key; the certificate fingerprint is in [SECURITY.md](SECURITY.md). You
+> can also [build from source](#build-from-source).
 
 Right now the data covers **Berlin only**.
 
