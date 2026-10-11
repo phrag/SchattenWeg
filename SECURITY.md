@@ -70,8 +70,12 @@ debug-signed and never receive the secrets. Keep an offline backup of the
 keystore and its passwords: Android will not accept updates signed by a
 different key, so losing it means a new app identity.
 
-Release certificate SHA-256 fingerprint (fill in after the first signed
-release): `TODO`
+Release certificate SHA-256 fingerprint (compare against `apksigner verify
+--print-certs` on any release APK):
+
+```
+0B:E2:F0:AD:D9:1F:66:94:8C:65:A6:5B:01:56:BA:46:17:F6:4E:17:4B:7C:92:93:7B:BA:1A:FE:CE:E2:2A:FC
+```
 
 If a key is ever committed: rotate it. Rewriting history is not enough — treat
 any pushed key as burned.
