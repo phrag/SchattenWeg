@@ -39,8 +39,8 @@ android {
         applicationId = "de.schattenweg.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
     }
 
     signingConfigs {
@@ -61,6 +61,13 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             isDebuggable = false
+            ndk {
+                // Real phones only. The Rust core is built for arm64-v8a and
+                // x86_64, so the x86 / armeabi-v7a copies of MapLibre (~23 MB)
+                // could never run, and x86_64 is an emulator ABI: debug
+                // builds keep it, the shipped APK does not.
+                abiFilters += "arm64-v8a"
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -80,10 +87,14 @@ android {
     }
 
     androidResources {
-        // Map data must be stored uncompressed: PMTiles needs byte-range
-        // reads, and AssetManager.openFd() refuses compressed entries. These
-        // formats are already compressed internally, so nothing is lost.
-        noCompress += listOf("pbf", "pmtiles", "graphcache")
+        // The tiles and the OSM snapshot are already compressed internally
+        // (deflate/gzip saves under 0.1%), so they are stored as-is and
+        // MapAssets can read their size with openFd(). The graph cache is NOT
+        // listed: it is a raw binary dump that compresses from ~110 MB to
+        // ~46 MB, and MapAssets copies it out to filesDir anyway (it never
+        // needs openFd or byte-range reads). MapAssets tells whether such a
+        // compressed copy is current with a stamp file.
+        noCompress += listOf("pbf", "pmtiles")
     }
 
     compileOptions {
