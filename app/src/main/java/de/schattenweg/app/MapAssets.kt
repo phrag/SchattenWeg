@@ -3,6 +3,7 @@ package de.schattenweg.app
 import android.content.Context
 import org.json.JSONObject
 import java.io.File
+import java.time.LocalDate
 
 /**
  * Provisions the bundled map data into app-private storage.
@@ -39,6 +40,9 @@ object MapAssets {
     /** Core-written cache of the scored graph; see [Provisioned.routingCache]. */
     private const val ROUTING_CACHE = "berlin-routing.graphcache"
     private const val TILES_ASSET = "berlin.pmtiles"
+
+    /** Written by build_map_assets.sh: `osm_snapshot=` and `built_utc=` lines. */
+    private const val DATA_INFO_ASSET = "data-info.txt"
     private const val GLYPHS_ASSET = "glyphs"
 
     fun ensure(context: Context): Provisioned {
@@ -136,6 +140,23 @@ object MapAssets {
         }
         return out
     }
+
+    /**
+     * The day the bundled OpenStreetMap extract was cut (its replication
+     * timestamp, not the day it was downloaded), i.e. how fresh the cameras
+     * are. Null when the build bundles no data, or the date is missing or
+     * "unknown", so the UI simply shows nothing rather than a wrong date.
+     */
+    fun snapshotDate(context: Context): LocalDate? = runCatching {
+        context.assets.open("$ASSET_DIR/$DATA_INFO_ASSET").bufferedReader().useLines { lines ->
+            lines.map { it.trim() }
+                .firstOrNull { it.startsWith("osm_snapshot=") }
+                ?.removePrefix("osm_snapshot=")
+                // "2026-10-09T20:21:04Z" -> the date part.
+                ?.take(10)
+                ?.let { LocalDate.parse(it) }
+        }
+    }.getOrNull()
 
     /** Changes whenever the app is installed or updated; null if unreadable. */
     private fun installStamp(context: Context): String? = runCatching {

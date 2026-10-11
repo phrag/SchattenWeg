@@ -84,6 +84,10 @@ self-defeating.** So everything sensitive is on-device.
   no geocoder, so searching for a destination reveals nothing to anyone. The
   index costs nothing extra to build: it is collected in the graph-build passes,
   not a separate scan.
+  The search field asks the keyboard for **no suggestions and no personalised
+  learning** (`PrivateTextInput` in `MapScreen.kt`; keyboards may ignore it): a
+  keyboard that remembers destinations would leak what the app keeps on the
+  device. Any new text input must go through it.
 - **MapLibre 13.x renders with Vulkan** (its manifest marks Vulkan 1.0
   required). Fine for the Pixel-class hardware GrapheneOS runs on, but
   emulators commonly lack a usable Vulkan driver and then render *nothing* —
@@ -105,6 +109,9 @@ self-defeating.** So everything sensitive is on-device.
 - **PMTiles must be read from `filesDir`, not assets** — Android's asset
   manager can't serve the byte-range reads PMTiles needs. `MapAssets` copies
   both the tiles and the routing snapshot out on first launch.
+- **The compass is our own button**, in the right-hand control column
+  (`CompassButton`); MapLibre's native one is off because it ignores the system
+  bars and drew over the status bar.
 - **3D buildings are a view layer only, on by default.** `building-3d` in
   `style_template.json` is a `fill-extrusion` of the basemap's own `building`
   layer (heights from the OpenMapTiles `render_height` / `render_min_height`
@@ -281,6 +288,9 @@ Both live in `MapScreen.kt`:
    `release.yml` keeping the asset name `schattenweg-latest.apk`),
    a **"Rendered with MapLibre"** renderer
    credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
+   a **"Camera data: OpenStreetMap, <date>"** line (the day the bundled OSM extract
+   was cut — `build_map_assets.sh` ships it as `assets/map/data-info.txt`,
+   `MapAssets.snapshotDate`; hidden when the build bundles no data),
    and the project GitHub / "Report a problem" links (there is deliberately no
    maintainer-name credit). The "© OpenStreetMap
    contributors" and "© OpenMapTiles" lines in About are **links** to their
