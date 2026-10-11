@@ -334,8 +334,9 @@ Track progress against this list when picking the project back up:
       needs osmium + Java 21 for Planetiler, so the job sets up both 17 and 21),
       builds the APK, and publishes it to GitHub Releases. Outputs are named
       `schattenweg-<variant>.apk` (`base.archivesName`), not `app-<variant>.apk`.
-      Released APKs are offline-complete but **debug-signed** — release-key
-      signing needs the keystore, which never enters the repo. The everyday
+      Tags and `main` pushes are signed with the release key from repo secrets
+      (see SECURITY.md); other refs are debug-signed. The rolling asset keeps
+      the name `schattenweg-latest-debug.apk` for URL stability. The everyday
       `ci.yml` still builds an **asset-free** debug APK as a compile check only.
 
 **Verified end to end on an emulator** (2026-08-29, arm64, OpenGL backend):

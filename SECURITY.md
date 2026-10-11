@@ -65,8 +65,10 @@ secrets `SCHATTENWEG_KEYSTORE_BASE64`, `SCHATTENWEG_STORE_PASSWORD`,
 `SCHATTENWEG_KEY_ALIAS` and `SCHATTENWEG_KEY_PASSWORD` into the runner's temp
 dir, builds `assembleRelease`, verifies the signature with `apksigner` and
 deletes the key. If any secret is missing the tag build fails instead of
-publishing a debug-signed "release". Rolling `latest` and manual builds stay
-debug-signed and never receive the secrets. Keep an offline backup of the
+publishing a debug-signed "release". The same applies to pushes to `main`,
+whose rolling `latest` build is signed with the release key too (anyone who can
+push to `main` can therefore get code signed: protect the branch). Manual runs
+from other branches stay debug-signed and never receive the secrets. Keep an offline backup of the
 keystore and its passwords: Android will not accept updates signed by a
 different key, so losing it means a new app identity.
 

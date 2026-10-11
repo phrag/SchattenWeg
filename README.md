@@ -49,7 +49,7 @@ the permission to reach the internet.
    which commit and OSM snapshot it carries.
    - Want the newest unreleased code instead? The
      **[development build](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk)**
-     is a debug-signed APK rebuilt on every push to `main`
+     is rebuilt on every push to `main` (unreleased code, same release key)
      ([notes](https://github.com/phrag/SchattenWeg/releases/tag/latest)).
    - Want an older version? Every tagged build is on the
      **[Releases page](https://github.com/phrag/SchattenWeg/releases)**.
@@ -63,8 +63,8 @@ as **GrapheneOS** — there are no Google Play Services to miss.
 
 > Versioned releases (`v*` tags) are signed with the Schattenweg release key;
 > compare the certificate fingerprint in [SECURITY.md](SECURITY.md). The rolling
-> `latest` build is **debug-signed**: it installs and runs, but isn't a
-> release-key build. You can also [build from source](#build-from-source).
+> `latest` development build is signed with the same key. You can also
+> [build from source](#build-from-source).
 
 Right now the data covers **Berlin only**.
 
@@ -292,7 +292,7 @@ SchattenWeg/
 
 ### Releases
 
-Pushes to `main` publish a rolling **`latest`** debug APK under a fixed name,
+Pushes to `main` publish a rolling **`latest`** APK (release-key-signed) under a fixed name,
 `schattenweg-latest-debug.apk` (that stable name is what keeps the README's
 direct download link working — don't put the commit in it); pushing a `v*` tag
 publishes a versioned one. Both regenerate the map assets from a freshly
