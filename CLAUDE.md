@@ -368,9 +368,16 @@ Track progress against this list when picking the project back up:
 the bundled 81 MB PMTiles basemap renders offline from `filesDir`, ingest
 reports 4251 Berlin cameras with 641 drawn within a 2 km radius, tap-to-route
 plans between two taps, and moving λ re-plans. A λ=8 route across the centre
-came out 3093 m at 0% mean exposure. **Not yet run on real hardware** — the
-emulator has no usable Vulkan driver, so that path is still unexercised (see
-§3); a Pixel is the next real test.
+came out 3093 m at 0% mean exposure.
+
+**Verified on a real phone** (2026-10-11, arm64, the signed release build with
+the default Vulkan backend): the offline basemap with 3D buildings, camera
+markers and coverage wedges, AI-zone circles and their cards, search, the
+Low/Medium/High routes (the same A→B was 1256 m / 32% under watch at Low and
+1708 m / 7% at High), the layers/About panel, the compressed graph cache
+(second launch as fast as the first) and the data-freshness line all work. The
+Vulkan path is no longer unexercised. Not yet covered: other devices and OS
+versions, GrapheneOS specifically, low-RAM phones, battery.
 
 Three bugs that only appear on-device were found in that first run, all worth
 remembering because none could fail a unit test:
@@ -411,8 +418,9 @@ scores can't outlive the code that produced them.
 often rather than saving up: when a user-visible feature or fix has landed on
 `main` and CI is green, or several commits have accumulated since the last tag
 (`git log $(git describe --tags --abbrev=0)..origin/main`), say so and propose
-the next version. Stay `0.x` until the app has run on real hardware (a Pixel /
-GrapheneOS; the Vulkan path is untested). Bump `versionName` and `versionCode`
+the next version. The app has now run on a real phone (see §7), so 1.0.0 is a
+judgement call about breadth of testing (more devices, GrapheneOS), not a
+hardware blocker. Bump `versionName` and `versionCode`
 (never decrease the code) in `app/build.gradle.kts` before tagging. The user
 pushes the tag themselves; tag pushes from a cloud session are usually blocked.
 
