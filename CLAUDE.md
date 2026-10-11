@@ -102,7 +102,10 @@ self-defeating.** So everything sensitive is on-device.
   tells a current copy by a `.stamp` file holding the install's
   `lastUpdateTime`. The release build is **arm64-v8a only** (`abiFilters`);
   debug keeps x86_64 for emulators. Bundled assets are also copied to `filesDir`,
-  so on-device storage is roughly APK + extracted data. Remaining levers: drop
+  so on-device storage is roughly APK + extracted data. The tiles drop the
+  OpenMapTiles layers the style never reads (`EXCLUDE_LAYERS` in
+  `build_map_assets.sh`: poi, housenumber, … were ~half the tile bytes); add a
+  layer to the style → take it off that list. Remaining levers: drop
   the bundled `.pbf` (the cache fingerprint is a content hash of it, so that
   needs a build-time fingerprint instead), a more compact cache format, and
   trimming the tile zoom range / bounding box.

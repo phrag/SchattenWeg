@@ -421,11 +421,20 @@ fi
 # against the SHA-256 the Planetiler release publishes next to it before running.
 verify_sha256 "$PLANETILER_JAR" "$PLANETILER_URL.sha256" "Planetiler $PLANETILER_VERSION"
 
+# Leave out the OpenMapTiles layers app/src/main/assets/style_template.json never
+# draws. Measured on the v0.2.0 tiles (zoom 14-15 hold 92% of the file): poi was
+# 42% of the tile bytes and housenumber 10%, so ~half the 82 MB was data no
+# style layer reads. The style's source-layers are boundary, building,
+# landcover, landuse, park, place, transportation, transportation_name, water
+# and waterway: if a layer is ever added to the style, take it off this list.
+EXCLUDE_LAYERS="poi,housenumber,water_name,aeroway,aerodrome_label,mountain_peak"
+
 echo "Rendering Berlin vector tiles (this takes a few minutes)..."
 java -Xmx3g -jar "$PLANETILER_JAR" \
     --osm-path="$RAW" \
     --output="$TILES" \
     --maxzoom=15 \
+    --exclude-layers="$EXCLUDE_LAYERS" \
     --download \
     --download-dir="$DATA/planetiler-sources" \
     --force \
