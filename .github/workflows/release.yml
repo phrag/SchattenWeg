@@ -9,6 +9,9 @@ name: Release
 #                      always downloadable at the stable URL linked from the
 #                      README:
 #                      /releases/download/latest/schattenweg-latest.apk
+#   * every Monday  -> the same rolling "latest" rebuild from the unchanged
+#                      main, so its cameras stay current when nobody pushes
+#                      (scheduled runs always use the default branch)
 #   * push a v* tag -> a permanent, versioned release for that tag
 #   * manual run    -> a throwaway build-<run> pre-release
 #
@@ -21,6 +24,11 @@ on:
   push:
     branches: ["main"]
     tags: ["v*"]
+  schedule:
+    # Mondays 05:17 UTC (off the hour, when scheduled runs queue up). GitHub
+    # switches scheduled workflows off after 60 days without repository
+    # activity; any push re-enables them.
+    - cron: "17 5 * * 1"
   workflow_dispatch:
 
 # Creating a release and uploading assets needs write access to the repo's
@@ -206,7 +214,7 @@ jobs:
 
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             tag="$GITHUB_REF_NAME"; prerelease=false; title="$GITHUB_REF_NAME"; label="$GITHUB_REF_NAME"
-          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          elif [ "$GITHUB_EVENT_NAME" = "push" ] || [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
             tag="latest"; prerelease=true; title="Latest build (main@$short_sha)"; label="latest"
           else
             tag="build-$GITHUB_RUN_NUMBER"; prerelease=true; title="build-$GITHUB_RUN_NUMBER"; label="build-$GITHUB_RUN_NUMBER"
