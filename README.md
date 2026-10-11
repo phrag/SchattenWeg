@@ -58,9 +58,10 @@ the permission to reach the internet.
 **Requirements:** Android 10 (API 29) or newer. Works on de-Googled devices such
 as **GrapheneOS** — there are no Google Play Services to miss.
 
-> The APKs in Releases are **debug-signed**: they install and run, and they're
-> the easiest way to try the app. They aren't a store-grade signed build. If you
-> prefer, you can [build from source](#build-from-source) instead.
+> Versioned releases (`v*` tags) are signed with the Schattenweg release key;
+> compare the certificate fingerprint in [SECURITY.md](SECURITY.md). The rolling
+> `latest` build is **debug-signed**: it installs and runs, but isn't a
+> release-key build. You can also [build from source](#build-from-source).
 
 Right now the data covers **Berlin only**.
 

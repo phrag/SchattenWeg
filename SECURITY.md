@@ -60,6 +60,19 @@ missing the release build produces an *unsigned* APK — deliberately, rather
 than falling back to the public debug key, which would look signed while being
 trivially forgeable.
 
+**CI release signing.** A `v*` tag build decodes the keystore from the repo
+secrets `SCHATTENWEG_KEYSTORE_BASE64`, `SCHATTENWEG_STORE_PASSWORD`,
+`SCHATTENWEG_KEY_ALIAS` and `SCHATTENWEG_KEY_PASSWORD` into the runner's temp
+dir, builds `assembleRelease`, verifies the signature with `apksigner` and
+deletes the key. If any secret is missing the tag build fails instead of
+publishing a debug-signed "release". Rolling `latest` and manual builds stay
+debug-signed and never receive the secrets. Keep an offline backup of the
+keystore and its passwords: Android will not accept updates signed by a
+different key, so losing it means a new app identity.
+
+Release certificate SHA-256 fingerprint (fill in after the first signed
+release): `TODO`
+
 If a key is ever committed: rotate it. Rewriting history is not enough — treat
 any pushed key as burned.
 

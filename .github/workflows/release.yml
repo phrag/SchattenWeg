@@ -117,13 +117,58 @@ jobs:
           java -version
           ./scripts/build_map_assets.sh
 
-      # A debug-type APK, but with the Berlin data bundled, so it is a working
-      # offline build (not the blank-basemap fallback ci.yml produces). It is
-      # debug-signed and carries the .debug application-id suffix — the release
-      # notes say so; a release-key-signed build still needs the keystore, which
-      # never enters the repo.
+      # Release signing. A v* tag MUST produce a release-key-signed APK: the
+      # job fails rather than publishing a debug-signed "release". Other runs
+      # (rolling latest, manual) stay debug-signed and never see the secrets.
+      # The keystore is base64 in a repo secret and exists only on the runner's
+      # temp dir for this job; it never touches the workspace or git.
+      - name: Decode release keystore (tags only)
+        id: signing
+        if: github.ref_type == 'tag'
+        env:
+          KEYSTORE_B64: ${{ secrets.SCHATTENWEG_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.SCHATTENWEG_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SCHATTENWEG_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SCHATTENWEG_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for v in KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Repo secret for $v is missing; a tagged release must be signed."
+              exit 1
+            fi
+          done
+          umask 077
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "store=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+
+      # Tags: signed, minified release build (no .debug id suffix). Anything
+      # else: the debug APK with the Berlin data bundled, debug-signed.
+      - name: Assemble release APK (signed)
+        if: github.ref_type == 'tag'
+        env:
+          SCHATTENWEG_STORE_FILE: ${{ steps.signing.outputs.store }}
+          SCHATTENWEG_STORE_PASSWORD: ${{ secrets.SCHATTENWEG_STORE_PASSWORD }}
+          SCHATTENWEG_KEY_ALIAS: ${{ secrets.SCHATTENWEG_KEY_ALIAS }}
+          SCHATTENWEG_KEY_PASSWORD: ${{ secrets.SCHATTENWEG_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --no-daemon
+
       - name: Assemble debug APK
+        if: github.ref_type != 'tag'
         run: ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Verify release signature
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          apk="$(ls app/build/outputs/apk/release/*.apk | head -n1)"
+          apksigner="$(ls "$ANDROID_SDK_ROOT"/build-tools/*/apksigner | sort -V | tail -n1)"
+          "$apksigner" verify --verbose --print-certs "$apk" | tee sig.txt
+          if grep -qi "Android Debug" sig.txt; then
+            echo "::error::Release APK is signed with the debug certificate."
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/release.jks"
 
       - name: Check for Google/Play Services dependencies
         run: |
@@ -165,8 +210,13 @@ jobs:
           # README links straight to
           #   releases/download/latest/schattenweg-latest-debug.apk
           # and that URL only stays valid if the name never changes.
-          apk="schattenweg-${label}-debug.apk"
-          cp "$(ls app/build/outputs/apk/debug/*.apk | head -n1)" "$apk"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            apk="schattenweg-${label}.apk"
+            cp "$(ls app/build/outputs/apk/release/*.apk | head -n1)" "$apk"
+          else
+            apk="schattenweg-${label}-debug.apk"
+            cp "$(ls app/build/outputs/apk/debug/*.apk | head -n1)" "$apk"
+          fi
 
           {
             echo "tag=$tag"
@@ -187,11 +237,18 @@ jobs:
             echo "| Camera data (OSM snapshot) | $osm_snapshot |"
             echo "| Cameras bundled | $cameras surveillance nodes |"
             echo ""
-            echo "**Debug-signed** with the \`.debug\` application-id suffix —"
-            echo "installable and usable, but not signed with a release key."
-            echo "For a release-key-signed APK, build from source with the"
-            echo "keystore in place. Fully offline: the app declares no"
-            echo "\`INTERNET\` permission. Berlin only, for now."
+            if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+              echo "**Signed with the Schattenweg release key.** Verify the"
+              echo "certificate fingerprint against SECURITY.md before installing."
+              echo ""
+              echo "Fully offline: the app declares no \`INTERNET\` permission."
+              echo "Berlin only, for now."
+            else
+              echo "**Debug-signed** with the \`.debug\` application-id suffix —"
+              echo "installable and usable, but not signed with a release key."
+              echo "Fully offline: the app declares no \`INTERNET\` permission."
+              echo "Berlin only, for now."
+            fi
           } > release-notes.md
           echo "--- release notes ---"; cat release-notes.md
 
