@@ -380,6 +380,16 @@ and `rstar` in place of the grids.
 chain in `osm.rs`), bump `cache::VERSION` so stale
 scores can't outlive the code that produced them.
 
+**Release cadence — remind the user.** Signed releases are cut by pushing a
+`v*` tag (the key lives in repo secrets; see SECURITY.md). Release early and
+often rather than saving up: when a user-visible feature or fix has landed on
+`main` and CI is green, or several commits have accumulated since the last tag
+(`git log $(git describe --tags --abbrev=0)..origin/main`), say so and propose
+the next version. Stay `0.x` until the app has run on real hardware (a Pixel /
+GrapheneOS; the Vulkan path is untested). Bump `versionName` and `versionCode`
+(never decrease the code) in `app/build.gradle.kts` before tagging. The user
+pushes the tag themselves; tag pushes from a cloud session are usually blocked.
+
 **Deliberately deferred:** cycling profile, location puck ("centre on me"),
 camera FOV tuning against ground truth, Play Services fallback build.
 (On-device place search — `Router::search_places`, `core/src/places.rs` — is
