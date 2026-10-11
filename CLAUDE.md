@@ -337,7 +337,10 @@ Track progress against this list when picking the project back up:
       Tags and `main` pushes are signed with the release key from repo secrets
       (see SECURITY.md); other refs are debug-signed. The rolling asset is
       `schattenweg-latest.apk` (keep that name stable: the README and the
-      in-app link use it). The everyday
+      in-app link use it). Tagged releases ship `schattenweg.apk`, a fixed
+      name so `releases/latest/download/schattenweg.apk` is always a direct
+      download of the newest signed version (from the first tag built after
+      this change; v0.2.0 still has the versioned name). The everyday
       `ci.yml` still builds an **asset-free** debug APK as a compile check only.
 
 **Verified end to end on an emulator** (2026-08-29, arm64, OpenGL backend):

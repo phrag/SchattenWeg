@@ -217,7 +217,11 @@ jobs:
           #   releases/download/latest/schattenweg-latest.apk
           # and that URL only stays valid if the name never changes.
           if [ "$SIGNED" = "true" ]; then
-            apk="schattenweg-${label}.apk"
+            # Tagged releases use one fixed name so that
+            #   releases/latest/download/schattenweg.apk
+            # is always a direct download of the newest signed version (the
+            # version lives in the release tag, not the file name).
+            if [ "$GITHUB_REF_TYPE" = "tag" ]; then apk="schattenweg.apk"; else apk="schattenweg-${label}.apk"; fi
             cp "$(ls app/build/outputs/apk/release/*.apk | head -n1)" "$apk"
           else
             apk="schattenweg-${label}-debug.apk"
