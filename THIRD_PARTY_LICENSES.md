@@ -38,18 +38,20 @@ Compiled into the bundled native library. Direct dependencies:
 
 | Asset | Source | Licence |
 |-------|--------|---------|
-| Camera, street & place data; the derived routing snapshot | [OpenStreetMap](https://www.openstreetmap.org/copyright) | **ODbL 1.0** |
+| Camera, street & place data; the derived routing cache | [OpenStreetMap](https://www.openstreetmap.org/copyright) | **ODbL 1.0** |
 | Offline basemap (vector tiles) | Generated with [Planetiler](https://github.com/onthegomap/planetiler) from the [OpenMapTiles](https://openmaptiles.org/) schema | Schema **CC-BY 4.0**; data **ODbL 1.0** |
 | Label glyphs | [Noto Sans](https://github.com/notofonts/noto-fonts) (Latin ranges only) | SIL OFL 1.1 |
 
 ### About the OpenStreetMap data
 
-The bundled Berlin extract (`data/berlin-routing.osm.pbf`) is a **derived
-database** produced from OpenStreetMap. Under the ODbL's share-alike terms it is
-offered under the **[ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/)**.
-You can regenerate it from current OpenStreetMap data with
-[`scripts/build_map_assets.sh`](scripts/build_map_assets.sh), or take it from the
-assets attached to a [GitHub release](https://github.com/phrag/SchattenWeg/releases).
+The bundled Berlin routing data (`berlin-routing.graphcache`, built from the
+filtered extract `data/berlin-routing.osm.pbf`) is a **derived database**
+produced from OpenStreetMap. Under the ODbL's share-alike terms it is offered
+under the **[ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/)**. You
+can regenerate it from current OpenStreetMap data with
+[`scripts/build_map_assets.sh`](scripts/build_map_assets.sh), or take the
+`.graphcache` from `assets/map/` inside the APK of a
+[GitHub release](https://github.com/phrag/SchattenWeg/releases).
 
 ## Build-time tools (not shipped in the APK)
 

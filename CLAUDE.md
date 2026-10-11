@@ -105,13 +105,18 @@ self-defeating.** So everything sensitive is on-device.
   so on-device storage is roughly APK + extracted data. The tiles drop the
   OpenMapTiles layers the style never reads (`EXCLUDE_LAYERS` in
   `build_map_assets.sh`: poi, housenumber, … were ~half the tile bytes); add a
-  layer to the style → take it off that list. Remaining levers: drop
-  the bundled `.pbf` (the cache fingerprint is a content hash of it, so that
-  needs a build-time fingerprint instead), a more compact cache format, and
-  trimming the tile zoom range / bounding box.
+  layer to the style → take it off that list. The 59 MB `.pbf` is **not
+  bundled any more**: the pre-built cache *is* the routing data and the app
+  opens it alone (`Router::open_cache`, which checks the cache's format version
+  and zone signature, not the extract, since there is none to hash). Only a
+  build whose cache could not be pre-built (`SKIP_CACHE=1`, no `cargo`, a
+  failed step) bundles the `.pbf` as a fallback, and the app then scores the
+  graph itself on first launch. Remaining levers: a more compact cache format,
+  and trimming the tile zoom range / bounding box.
 - **PMTiles must be read from `filesDir`, not assets** — Android's asset
   manager can't serve the byte-range reads PMTiles needs. `MapAssets` copies
-  both the tiles and the routing snapshot out on first launch.
+  both the tiles and the routing cache out on first launch (and deletes the
+  old 59 MB extract that earlier installs left in `filesDir`).
 - **The compass is our own button**, in the right-hand control column
   (`CompassButton`); MapLibre's native one is off because it ignores the system
   bars and drew over the status bar.
@@ -239,8 +244,10 @@ camera positions or boundaries are published — the Senate refused (Drucksache
   `cache::VERSION` bump like any other scoring change. This also covers the
   cache pre-built into the APK by `build_map_assets.sh`: it is built by the
   same code, so it matches the zone table of the commit it was built from. A
-  stale asset set built before a zone edit is rejected on-device and the app
-  scores on first launch instead — slower, never wrong.
+  stale asset set built before a zone edit is rejected on-device. With an
+  extract bundled the app scores on first launch instead; the normal build has
+  no extract, so it shows "the routing data is unusable" — which is why the
+  asset step builds the cache from the same commit it packages.
 - **UI:** violet dashed circles under "AI-monitored zones", long-press for
   status and what is detected. Hiding the layer does not change routing.
   Re-check `AS_OF` and the status table as pilots start; replace the circles
@@ -406,15 +413,18 @@ next to the extract in `filesDir` instead of re-deriving it, so every cold
 start *after the first* skips the pass. The cache is only the five flat inputs
 the router is assembled from (nodes, scored edges, cameras, places, and the
 blocking-building outlines near cameras); its header
-carries a format/logic `VERSION` and a fingerprint of the source extract, and
-any mismatch or malformed byte makes it fall back to the PBF. **Pre-built at asset-build time:**
-`build_map_assets.sh` now runs `core/examples/build_cache.rs` (same `Router::open`
-path) and bundles `berlin-routing.graphcache` beside the snapshot; `MapAssets`
-copies it to `filesDir`, so even the first launch skips the pass. The cache
-fingerprint is a **content hash** of the extract (not size+mtime, which would
-change when the asset is copied); a missing/stale cache still falls back to the
-PBF. `SKIP_CACHE=1` skips the step. Remaining lever: stop bundling the `.pbf`,
-and `rstar` in place of the grids.
+carries a format/logic `VERSION`, a fingerprint of the source extract and a
+signature of the zone table (two separate fields since v6), and with an extract
+on disk (`Router::open`) any mismatch or malformed byte makes it fall back to
+the PBF. **Pre-built at asset-build time:** `build_map_assets.sh` runs
+`core/examples/build_cache.rs` (same `Router::open` path) and bundles
+`berlin-routing.graphcache`; `MapAssets` copies it to `filesDir`, so even the
+first launch skips the pass. The shipped app has no extract and opens the cache
+alone with `Router::open_cache`, which skips the extract fingerprint (a
+**content hash**, so it could not be recomputed anyway) but still checks the
+version and the zone signature, and reports an error rather than rebuilding if
+the cache is missing or damaged. `SKIP_CACHE=1` skips the step and bundles the
+extract instead. Remaining lever: `rstar` in place of the grids.
 **When the scoring/geometry logic changes** (`camera.rs` coverage, the
 `defaults` table, `exposure.rs` sampling, `occluders.rs`, the building height
 chain in `osm.rs`), bump `cache::VERSION` so stale

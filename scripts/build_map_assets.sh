@@ -4,11 +4,16 @@
 #
 #   1. data/berlin-latest.osm.pbf     full Geofabrik extract (download, ~70 MB)
 #   2. data/berlin-routing.osm.pbf    streets + buildings + surveillance nodes
-#                                     only — what the Rust core ingests
-#                                     on-device (buildings block camera view)
+#                                     only — what the Rust core ingests (the
+#                                     scored cache below is built from it)
 #   3. data/berlin.pmtiles            vector basemap tiles (Planetiler)
+#   4. berlin-routing.graphcache      the scored routing graph built from 2
 #
-# 2 and 3 are copied into app/src/main/assets/map/ for the APK build.
+# 3 and 4 are copied into app/src/main/assets/map/ for the APK build. The app
+# loads the cache alone (Router::open_cache), so 2 is NOT bundled: it was 59 MB
+# of the APK, copied a second time onto the phone. Only if the cache cannot be
+# built (SKIP_CACHE=1, no cargo, or a failed pre-build) is 2 bundled instead, so
+# that the app still routes, scoring the graph itself on first launch.
 #
 # Prerequisites: curl, osmium (osmium-tool), md5sum, java 21+ (for Planetiler).
 # Run it from anywhere; paths resolve relative to the repo.
@@ -298,32 +303,45 @@ fi
 # core/src/occluders.rs). tags-filter pulls in the nodes of every kept way and
 # the member ways of every kept relation, which is what multipolygon buildings
 # need. The core prunes the buildings to those near a camera at load time and
-# the cache stores only that subset, but this file carries all of them -- if the
-# APK size matters, check the size of $ROUTING after this step.
+# the cache stores only that subset, but this file carries all of them. It is no
+# longer bundled (see the top of this file), so its size only costs build time.
 echo "Filtering to walkable streets + buildings + surveillance nodes..."
 osmium tags-filter --overwrite "$RAW" \
     w/highway w/building r/building n/man_made=surveillance \
     -o "$ROUTING" \
     || die "osmium could not filter $RAW (is the file complete?)"
 osmium fileinfo -e "$ROUTING" | sed -n 's/^  Number of/  /p' || true
-cp "$ROUTING" "$ASSETS/berlin-routing.osm.pbf"
-echo "-> $ROUTING (bundled into app assets)"
+echo "-> $ROUTING"
 
-# Pre-build the scored-graph cache with the same core code the app runs, so the
-# first launch loads it instead of spending seconds on the exposure pass. It is
-# keyed to this exact snapshot's contents; the app falls back to scoring from
-# the .pbf if it is missing or stale, so failure here only costs launch speed.
-# SKIP_CACHE=1 skips it.
+# Pre-build the scored-graph cache with the same core code the app runs. It IS
+# the app's routing data: the cameras, places, street graph (already scored) and
+# the building outlines near cameras are all in it, so the app opens it without
+# the extract (Router::open_cache). It is checked for the format version and
+# the zone table, not for the extract's contents, because the extract is not
+# shipped. SKIP_CACHE=1 skips this step (and then the extract is bundled).
 CACHE_ASSET="$ASSETS/berlin-routing.graphcache"
-rm -f "$CACHE_ASSET"
+ROUTING_ASSET="$ASSETS/berlin-routing.osm.pbf"
+rm -f "$CACHE_ASSET" "$ROUTING_ASSET"
+cache_built=0
 if [[ "${SKIP_CACHE:-0}" != "1" ]]; then
     if command -v cargo >/dev/null 2>&1; then
-        cargo run --quiet --release --manifest-path "$ROOT/core/Cargo.toml" \
-            --example build_cache -- "$ASSETS/berlin-routing.osm.pbf" "$CACHE_ASSET" \
-            || { echo "WARNING: cache pre-build failed; app will score on first launch"; rm -f "$CACHE_ASSET"; }
+        if cargo run --quiet --release --manifest-path "$ROOT/core/Cargo.toml" \
+            --example build_cache -- "$ROUTING" "$CACHE_ASSET"; then
+            cache_built=1
+        else
+            echo "WARNING: cache pre-build failed"
+            rm -f "$CACHE_ASSET"
+        fi
     else
-        echo "cargo not found -- skipping cache pre-build (app scores on first launch)"
+        echo "cargo not found -- cannot pre-build the routing cache"
     fi
+fi
+if [[ "$cache_built" == "1" ]]; then
+    echo "-> $CACHE_ASSET (bundled into app assets; the extract is not)"
+else
+    # No cache, so the app has to build the graph itself from the extract.
+    cp "$ROUTING" "$ROUTING_ASSET"
+    echo "-> $ROUTING_ASSET (bundled instead: the app scores on first launch)"
 fi
 
 # Provenance: record what this snapshot actually contains so a build can state

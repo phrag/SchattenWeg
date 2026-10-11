@@ -123,12 +123,13 @@ impl Router {
     #[uniffi::constructor]
     pub fn open(pbf_path: String, cache_path: String) -> Result<Arc<Self>, RouteError> {
         let fp = source_fingerprint(&pbf_path);
+        let zones = zone_signature();
 
         // Cache hit: reload the scored parts and skip the exposure pass.
         if let Some(fp) = fp {
             if let Ok(file) = std::fs::File::open(&cache_path) {
                 let mut reader = std::io::BufReader::new(file);
-                if let Ok(parts) = cache::read(&mut reader, fp) {
+                if let Ok(parts) = cache::read(&mut reader, fp, zones) {
                     return Ok(Arc::new(Self::assemble(parts)));
                 }
             }
@@ -138,8 +139,32 @@ impl Router {
         // next launch hits. A write failure just leaves us uncached.
         let parts = build_parts_from_pbf(&pbf_path)?;
         if let Some(fp) = fp {
-            write_cache(&cache_path, &parts, fp);
+            write_cache(&cache_path, &parts, fp, zones);
         }
+        Ok(Arc::new(Self::assemble(parts)))
+    }
+
+    /// Build a router from the cache alone, with no OSM extract on disk.
+    ///
+    /// This is how the shipped app starts: the APK bundles the cache that
+    /// `examples/build_cache.rs` pre-built (the scored graph, the cameras, the
+    /// places and the building outlines are all in it), not the 59 MB extract it
+    /// was built from. There is nothing to fall back to, so a missing, damaged
+    /// or out-of-date cache is an error rather than a slow rebuild. The
+    /// extract's content hash is not checked (there is no file to hash); the
+    /// format version and the zone-table signature still are, so a cache from
+    /// older logic or another zone table is refused.
+    ///
+    /// Faster than [`Router::open`] too: it skips hashing the whole extract on
+    /// every launch.
+    #[uniffi::constructor]
+    pub fn open_cache(cache_path: String) -> Result<Arc<Self>, RouteError> {
+        let load = |reason: String| RouteError::LoadFailed { reason };
+        let file = std::fs::File::open(&cache_path)
+            .map_err(|e| load(format!("cannot open the routing data: {e}")))?;
+        let mut reader = std::io::BufReader::new(file);
+        let parts = cache::read_without_source(&mut reader, zone_signature())
+            .map_err(|e| load(format!("the routing data is unusable: {e}")))?;
         Ok(Arc::new(Self::assemble(parts)))
     }
 
@@ -285,21 +310,25 @@ fn build_parts_from_pbf(pbf_path: &str) -> Result<cache::Parts, RouteError> {
 /// app storage — see [`cache::fingerprint`].
 fn source_fingerprint(pbf_path: &str) -> Option<u64> {
     let file = std::fs::File::open(pbf_path).ok()?;
-    let source = cache::fingerprint(&mut std::io::BufReader::new(file)).ok()?;
-    // The zone table is baked into every cached score, so it is part of what
-    // the cache is valid for: edit a zone and the old cache (including one
-    // pre-built into the APK) is rejected and the pass re-runs.
-    Some(source ^ zones::signature(&zones::table()))
+    cache::fingerprint(&mut std::io::BufReader::new(file)).ok()
+}
+
+/// Signature of the zone table. The zone table is baked into every cached
+/// score, so it is part of what a cache is valid for: edit a zone and the old
+/// cache (including one pre-built into the APK) is rejected, and the pass
+/// re-runs where there is an extract to run it on.
+fn zone_signature() -> u64 {
+    zones::signature(&zones::table())
 }
 
 /// Best-effort cache write: to a temp file then rename, so an interrupted write
 /// never leaves a truncated file that would read back as valid-looking. Any
 /// failure is swallowed — the cache is an optimisation, never required.
-fn write_cache(cache_path: &str, parts: &cache::Parts, fingerprint: u64) {
+fn write_cache(cache_path: &str, parts: &cache::Parts, source: u64, zones: u64) {
     let tmp = format!("{cache_path}.part");
     let ok = (|| -> std::io::Result<()> {
         let mut writer = std::io::BufWriter::new(std::fs::File::create(&tmp)?);
-        cache::write(&mut writer, parts, fingerprint)?;
+        cache::write(&mut writer, parts, source, zones)?;
         writer.into_inner()?.sync_all()?;
         std::fs::rename(&tmp, cache_path)
     })()

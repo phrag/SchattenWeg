@@ -8,7 +8,7 @@ import java.time.LocalDate
 /**
  * Provisions the bundled map data into app-private storage.
  *
- * Both the routing snapshot (read by the Rust core) and the PMTiles basemap
+ * Both the routing data (read by the Rust core) and the PMTiles basemap
  * (read by MapLibre, which needs byte-range access that Android assets can't
  * provide) are copied from APK assets to `filesDir/map/` on first launch.
  *
@@ -19,13 +19,18 @@ import java.time.LocalDate
 object MapAssets {
 
     data class Provisioned(
-        /** Berlin routing snapshot for the Rust core, or null if not bundled. */
+        /**
+         * The OSM extract the graph is scored from, or null. A normal build
+         * does not bundle it: the cache below *is* the routing data and the
+         * 59 MB extract stayed out of the APK. Only a build whose cache could
+         * not be pre-built ships it, so the app can score the graph itself.
+         */
         val routingPbf: File?,
         /**
-         * Where the core caches the exposure-scored graph. Not a bundled
-         * asset: the first launch derives it from [routingPbf] and writes it
-         * here (in the same private dir), so later launches skip the several-
-         * second scoring pass. Null when there is no snapshot to score.
+         * The exposure-scored graph. Normally the bundled cache, opened on its
+         * own. With only an extract bundled, the path where the core writes its
+         * own cache on the first launch (so later launches skip the several-
+         * second scoring pass). Null when neither is bundled.
          */
         val routingCache: File?,
         /** Offline basemap tiles, or null if not bundled. */
@@ -49,14 +54,17 @@ object MapAssets {
         val bundled = context.assets.list(ASSET_DIR)?.toSet() ?: emptySet()
         val outDir = File(context.filesDir, "map").apply { mkdirs() }
         val routingPbf = copyIfBundled(context, bundled, ROUTING_ASSET, outDir)
+        if (routingPbf == null) {
+            // Installs before the extract left the APK extracted it to filesDir.
+            // It is no longer read, so give the space back (59 MB).
+            File(outDir, ROUTING_ASSET).delete()
+        }
         return Provisioned(
             routingPbf = routingPbf,
-            // Prefer the cache pre-built by build_map_assets.sh; absent that,
-            // the path is still returned so the core can write its own.
-            routingCache = routingPbf?.let {
-                copyIfBundled(context, bundled, ROUTING_CACHE, outDir)
-                    ?: File(outDir, ROUTING_CACHE)
-            },
+            // The cache pre-built by build_map_assets.sh. With only an extract
+            // bundled the path is still returned, so the core can write its own.
+            routingCache = copyIfBundled(context, bundled, ROUTING_CACHE, outDir)
+                ?: routingPbf?.let { File(outDir, ROUTING_CACHE) },
             pmtiles = copyIfBundled(context, bundled, TILES_ASSET, outDir),
             glyphsDir = if (GLYPHS_ASSET in bundled) {
                 copyTree(context, "$ASSET_DIR/$GLYPHS_ASSET", File(outDir, GLYPHS_ASSET))

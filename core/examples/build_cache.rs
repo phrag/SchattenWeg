@@ -3,9 +3,11 @@
 //!
 //!     cargo run --release --example build_cache <routing.osm.pbf> <out.graphcache>
 //!
-//! Runs the same code path as the app (`Router::open`), so the output is
-//! exactly what the app would have written itself. The cache is keyed to the
-//! extract's contents: ship it beside that exact `.pbf`.
+//! Runs the same code path as a router built from the extract (`Router::open`),
+//! so the output is exactly what a build on the phone would have written. The
+//! app ships this file *instead of* the extract and opens it with
+//! `Router::open_cache`, which checks the format version and the zone table but
+//! not the extract (there is none to hash on the phone).
 
 use schattenweg_core::Router;
 use std::time::Instant;

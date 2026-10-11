@@ -5,7 +5,7 @@
 //! street grid with a dome camera on the short southern route, plus guard and
 //! ALPR nodes that ingest must drop. See the script for the exact layout.
 
-use schattenweg_core::{LatLon, PlaceKind, Router};
+use schattenweg_core::{LatLon, PlaceKind, RouteError, Router};
 
 fn fixture() -> String {
     format!(
@@ -209,6 +209,79 @@ fn open_falls_back_when_cache_is_corrupt() {
     // The corrupt file was replaced, so a second open now hits the cache.
     let again = Router::open(fixture(), cache.path()).expect("second open");
     assert_eq!(again.camera_count(), 2);
+}
+
+#[test]
+fn open_cache_matches_a_router_built_from_the_extract() {
+    // The shipped app has only the cache, no extract: it must route exactly as
+    // a router built from the extract does.
+    let cache = TempCache::new("cache-only");
+    let built = Router::open(fixture(), cache.path()).expect("open builds the cache");
+    let cache_only = Router::open_cache(cache.path()).expect("open_cache reads it");
+
+    assert_eq!(built.camera_count(), cache_only.camera_count());
+    assert_eq!(built.place_count(), cache_only.place_count());
+
+    let start = LatLon {
+        lat: 52.5200,
+        lon: 13.4000,
+    };
+    let end = LatLon {
+        lat: 52.5200,
+        lon: 13.4040,
+    };
+    for lambda in [0.0, 8.0] {
+        let a = built.plan(start, end, lambda).expect("built route");
+        let b = cache_only
+            .plan(start, end, lambda)
+            .expect("cache-only route");
+        assert_eq!(a.length_m, b.length_m, "length differs at λ={lambda}");
+        assert_eq!(
+            a.mean_exposure, b.mean_exposure,
+            "exposure differs at λ={lambda}"
+        );
+        assert_eq!(
+            a.polyline.len(),
+            b.polyline.len(),
+            "path differs at λ={lambda}"
+        );
+    }
+}
+
+#[test]
+fn open_cache_keeps_the_buildings() {
+    let cache = TempCache::new("cache-only-buildings");
+    Router::open(building_fixture(), cache.path()).expect("open builds the cache");
+    let cache_only = Router::open_cache(cache.path()).expect("open_cache reads it");
+    let from_pbf = Router::from_pbf(building_fixture()).expect("from_pbf");
+    assert_eq!(cache_only.camera_count(), from_pbf.camera_count());
+}
+
+#[test]
+fn open_cache_reports_a_missing_file() {
+    let cache = TempCache::new("cache-only-missing");
+    let err = Router::open_cache(cache.path())
+        .err()
+        .expect("no file, no router");
+    assert!(
+        matches!(&err, RouteError::LoadFailed { reason } if reason.contains("cannot open")),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
+fn open_cache_reports_a_damaged_file_instead_of_rebuilding() {
+    // With no extract there is nothing to rebuild from, so junk is an error
+    // (the opposite of `open`, which recovers from it).
+    let cache = TempCache::new("cache-only-junk");
+    std::fs::write(&cache.0, b"not a real cache").expect("seed junk");
+    let err = Router::open_cache(cache.path())
+        .err()
+        .expect("junk is refused");
+    assert!(
+        matches!(&err, RouteError::LoadFailed { reason } if reason.contains("unusable")),
+        "unexpected error: {err:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
