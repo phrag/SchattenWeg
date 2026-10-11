@@ -353,6 +353,9 @@ fi
     echo "surveillance_nodes=$cameras"
     echo "extract_source=$GEOFABRIK"
 } > "$BUILD_INFO"
+# The app shows how fresh its data is (About panel), so the two dates travel
+# inside the APK too. Dates only: nothing else from build-info.txt is shipped.
+grep -E '^(osm_snapshot|built_utc)=' "$BUILD_INFO" > "$ASSETS/data-info.txt"
 echo "   cameras: $cameras surveillance nodes  |  OSM snapshot: $osm_snapshot"
 echo "   provenance written to $BUILD_INFO"
 

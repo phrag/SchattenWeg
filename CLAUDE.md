@@ -288,6 +288,9 @@ Both live in `MapScreen.kt`:
    `release.yml` keeping the asset name `schattenweg-latest.apk`),
    a **"Rendered with MapLibre"** renderer
    credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
+   a **"Camera data: OpenStreetMap, <date>"** line (the day the bundled OSM extract
+   was cut — `build_map_assets.sh` ships it as `assets/map/data-info.txt`,
+   `MapAssets.snapshotDate`; hidden when the build bundles no data),
    and the project GitHub / "Report a problem" links (there is deliberately no
    maintainer-name credit). The "© OpenStreetMap
    contributors" and "© OpenMapTiles" lines in About are **links** to their

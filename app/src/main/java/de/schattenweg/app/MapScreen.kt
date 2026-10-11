@@ -90,6 +90,9 @@ import uniffi.schattenweg_core.PlaceKind
 import uniffi.schattenweg_core.ZoneStatus
 import uniffi.schattenweg_core.aiZones
 import uniffi.schattenweg_core.aiZonesAsOf
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -200,6 +203,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull()
     }
+    // How fresh the bundled OpenStreetMap data is, for the About section; null
+    // (and so hidden) when the build bundles no data.
+    val dataDate = remember(context) { MapAssets.snapshotDate(context) }
     val state by viewModel.state.collectAsState()
     val level by viewModel.level.collectAsState()
     val cameras by viewModel.cameras.collectAsState()
@@ -627,6 +633,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             LayersPanel(
                 layersOn = layersOn,
                 version = appVersion,
+                dataDate = dataDate,
                 onOpenLicenses = { licensesOpen.value = true },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -825,6 +832,7 @@ private fun SearchResultRow(
 private fun LayersPanel(
     layersOn: SnapshotStateMap<LayerGroup, Boolean>,
     version: String?,
+    dataDate: LocalDate?,
     onOpenLicenses: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -878,6 +886,17 @@ private fun LayersPanel(
             version?.let {
                 Text(
                     "Schattenweg v$it",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF9AA4B2),
+                )
+            }
+            // How old the cameras are: the day the bundled OSM extract was cut,
+            // in the user's own date format. Real coverage and recent changes
+            // are not in it, so this is the age of the data, not a promise.
+            dataDate?.let {
+                Text(
+                    "Camera data: OpenStreetMap, " +
+                        it.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF9AA4B2),
                 )
