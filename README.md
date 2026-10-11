@@ -11,7 +11,9 @@ going, the route you take — ever leaves the device. The app doesn't even hold
 the permission to reach the internet.
 
 <p align="center">
-  <a href="https://github.com/phrag/SchattenWeg/releases/latest"><b>⬇&nbsp;Download the latest release</b></a>
+  <a href="https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk"><b>⬇&nbsp;Download the latest release</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/phrag/SchattenWeg/releases/latest">release notes</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/phrag/SchattenWeg/releases">all releases</a>
 </p>
@@ -43,9 +45,9 @@ the permission to reach the internet.
 
 **On your Android phone:**
 
-1. **[Tap here to open the latest release](https://github.com/phrag/SchattenWeg/releases/latest)**,
-   scroll to **Assets** and tap the file ending in **`.apk`**. It is about
-   300 MB because the whole Berlin map is inside, so use Wi-Fi.
+1. **[Tap here to download the app](https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk)**. It is about
+   200 MB because the whole Berlin map is inside, so use Wi-Fi. (The same file
+   is under **Assets** on the [release page](https://github.com/phrag/SchattenWeg/releases/latest), next to the release notes.)
 2. When it has downloaded, tap **Open** (or open it from your **Downloads**).
    If your browser warns that the file "may be harmful", choose **Download
    anyway** — that is the standard message for any app that isn't from a store.
@@ -174,7 +176,7 @@ All of these are shown inside the app, on purpose.
 ---
 
 > **The rest of this page is for developers.** If you just want to use the app,
-> you're all set — [grab the latest release](https://github.com/phrag/SchattenWeg/releases/latest)
+> you're all set — [grab the latest release](https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk)
 > and go.
 
 ## Build from source
