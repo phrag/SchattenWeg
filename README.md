@@ -1,6 +1,7 @@
 # Schattenweg
 
 A private, secure, offline Android app that maps Berlin's CCTV cameras and plans walking routes that **avoid** them.
+Free and Open Source!
 
 > *Schattenweg* — "Shadow Path".
 
