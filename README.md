@@ -47,7 +47,7 @@ the permission to reach the internet.
    — the newest signed version, with the APK attached. Its release notes say
    which commit and OSM snapshot it carries.
    - Want the newest unreleased code instead? The
-     **[development build](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk)**
+     **[development build](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest.apk)**
      is rebuilt on every push to `main` (unreleased code, same release key)
      ([notes](https://github.com/phrag/SchattenWeg/releases/tag/latest)).
    - Want an older version? Every tagged build is on the
@@ -292,7 +292,7 @@ SchattenWeg/
 ### Releases
 
 Pushes to `main` publish a rolling **`latest`** APK (release-key-signed) under a fixed name,
-`schattenweg-latest-debug.apk` (that stable name is what keeps the README's
+`schattenweg-latest.apk` (that stable name is what keeps the README's
 direct download link working — don't put the commit in it); pushing a `v*` tag
 publishes a versioned one. Both regenerate the map assets from a freshly
 downloaded OSM extract, so a released APK always carries the latest cameras and

@@ -7,8 +7,8 @@ name: Release
 #   * push to main  -> a rolling "latest" pre-release (release-key-signed),
 #                      retagged to the new commit, so the newest build is
 #                      always downloadable at the stable URL linked from the
-#                      README (the "-debug" in the name is historical):
-#                      /releases/download/latest/schattenweg-latest-debug.apk
+#                      README:
+#                      /releases/download/latest/schattenweg-latest.apk
 #   * push a v* tag -> a permanent, versioned release for that tag
 #   * manual run    -> a throwaway build-<run> pre-release
 #
@@ -214,13 +214,10 @@ jobs:
 
           # The rolling build's asset name must NOT contain the commit: the
           # README links straight to
-          #   releases/download/latest/schattenweg-latest-debug.apk
+          #   releases/download/latest/schattenweg-latest.apk
           # and that URL only stays valid if the name never changes.
           if [ "$SIGNED" = "true" ]; then
-            # The rolling build keeps the historical asset name
-            # schattenweg-latest-debug.apk although it is now release-signed:
-            # the README and the shipped app link to exactly that URL.
-            if [ "$GITHUB_REF_TYPE" = "tag" ]; then apk="schattenweg-${label}.apk"; else apk="schattenweg-latest-debug.apk"; fi
+            apk="schattenweg-${label}.apk"
             cp "$(ls app/build/outputs/apk/release/*.apk | head -n1)" "$apk"
           else
             apk="schattenweg-${label}-debug.apk"

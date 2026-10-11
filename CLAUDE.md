@@ -267,7 +267,7 @@ Both live in `MapScreen.kt`:
    alongside the app **version** with a **"Get the latest version"** link that
    downloads the newest APK directly from the rolling `latest` release
    (`LATEST_APK_URL`; it and the README's direct APK link both rely on
-   `release.yml` keeping the asset name `schattenweg-latest-debug.apk`),
+   `release.yml` keeping the asset name `schattenweg-latest.apk`),
    a **"Rendered with MapLibre"** renderer
    credit, an **"Open-source licences"** link (to `THIRD_PARTY_LICENSES.md`),
    and the project GitHub / "Report a problem" links (there is deliberately no
@@ -335,8 +335,9 @@ Track progress against this list when picking the project back up:
       builds the APK, and publishes it to GitHub Releases. Outputs are named
       `schattenweg-<variant>.apk` (`base.archivesName`), not `app-<variant>.apk`.
       Tags and `main` pushes are signed with the release key from repo secrets
-      (see SECURITY.md); other refs are debug-signed. The rolling asset keeps
-      the name `schattenweg-latest-debug.apk` for URL stability. The everyday
+      (see SECURITY.md); other refs are debug-signed. The rolling asset is
+      `schattenweg-latest.apk` (keep that name stable: the README and the
+      in-app link use it). The everyday
       `ci.yml` still builds an **asset-free** debug APK as a compile check only.
 
 **Verified end to end on an emulator** (2026-08-29, arm64, OpenGL backend):

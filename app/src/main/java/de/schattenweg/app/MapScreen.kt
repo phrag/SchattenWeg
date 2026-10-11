@@ -153,7 +153,7 @@ private const val PROJECT_URL = "https://github.com/phrag/SchattenWeg"
  * browser or downloader, so the app itself still makes no network request.
  */
 private const val LATEST_APK_URL =
-    "https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk"
+    "https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest.apk"
 
 /** Where users report bugs and wrong data, linked from the About section. */
 private const val ISSUES_URL = "https://github.com/phrag/SchattenWeg/issues"
