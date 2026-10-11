@@ -3,7 +3,10 @@ package de.schattenweg.app
 import android.content.Intent
 import android.graphics.RectF
 import android.net.Uri
+import android.text.InputType
 import android.util.Log
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -41,12 +45,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.PlatformTextInputInterceptor
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -437,6 +448,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
         // only a toggle moves it again.
         val threeDOn = layersOn[LayerGroup.BUILDINGS_3D] == true &&
             layersOn[LayerGroup.BUILDINGS] != false
+        val bearing = remember { mutableStateOf(0.0) }
         val firstTiltPass = remember { mutableStateOf(true) }
         LaunchedEffect(threeDOn) {
             if (firstTiltPass.value) {
@@ -472,6 +484,14 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     // in the layers panel's About section instead.
                     map.uiSettings.isLogoEnabled = false
                     map.uiSettings.isAttributionEnabled = false
+                    // The native compass is drawn at the top-right corner and
+                    // ignores the system bars (it sat on top of the battery
+                    // icon). The compass is a button in the right-hand control
+                    // column instead, which lays out with the other buttons.
+                    map.uiSettings.isCompassEnabled = false
+                    map.addOnCameraMoveListener {
+                        bearing.value = map.cameraPosition.bearing
+                    }
                     // Two-finger tilt is what makes 3D buildings readable.
                     map.uiSettings.isTiltGesturesEnabled = true
                     map.cameraPosition = CameraPosition.Builder()
@@ -591,6 +611,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            CompassButton(bearing.value) {
+                mapRef.value?.animateCamera(CameraUpdateFactory.bearingTo(0.0), 400)
+            }
             ZoomButton("\u2261") { panelOpen.value = !panelOpen.value }
             ZoomButton("+") {
                 mapRef.value?.animateCamera(CameraUpdateFactory.zoomIn())
@@ -679,19 +702,26 @@ private fun SearchBar(
     onUse: (Place, Boolean) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            placeholder = { Text("Search a street or place") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color(0xF210141A),
-                unfocusedContainerColor = Color(0xF210141A),
-                focusedTextColor = Color(0xFFF2F4F8),
-                unfocusedTextColor = Color(0xFFF2F4F8),
-            ),
-        )
+        PrivateTextInput {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                placeholder = { Text("Search a street or place") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Text,
+                ),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xF210141A),
+                    unfocusedContainerColor = Color(0xF210141A),
+                    focusedTextColor = Color(0xFFF2F4F8),
+                    unfocusedTextColor = Color(0xFFF2F4F8),
+                ),
+            )
+        }
         if (results.isNotEmpty()) {
             Card(
                 Modifier.fillMaxWidth(),
@@ -709,6 +739,37 @@ private fun SearchBar(
             }
         }
     }
+}
+
+/**
+ * Asks the keyboard not to learn from, or suggest on, what is typed inside
+ * [content]. Searches are destinations, so a keyboard that remembers them (or
+ * offers them back in its suggestion strip) would leak exactly what this app
+ * keeps on the device. Compose has no option for these two flags, so they are
+ * set on the editor info as the input connection is created: no suggestions
+ * for the field, and no personalised learning for the keyboard. Keyboards are
+ * free to ignore either flag, so this is a request, not a guarantee.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun PrivateTextInput(content: @Composable () -> Unit) {
+    InterceptPlatformTextInput(
+        interceptor = PlatformTextInputInterceptor { request, nextHandler ->
+            nextHandler.startInputMethod(
+                object : PlatformTextInputMethodRequest {
+                    override fun createInputConnection(outAttrs: EditorInfo): InputConnection {
+                        val connection = request.createInputConnection(outAttrs)
+                        outAttrs.inputType =
+                            outAttrs.inputType or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                        outAttrs.imeOptions =
+                            outAttrs.imeOptions or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                        return connection
+                    }
+                },
+            )
+        },
+        content = content,
+    )
 }
 
 @Composable
@@ -1067,6 +1128,29 @@ private fun ZoomButton(label: String, onClick: () -> Unit) {
                 label,
                 style = MaterialTheme.typography.titleLarge,
                 color = Color(0xFFF2F4F8),
+            )
+        }
+    }
+}
+
+/**
+ * Resets the map to north-up. The arrow points to north whichever way the map
+ * has been turned, so it also shows how far the map is rotated.
+ */
+@Composable
+private fun CompassButton(bearing: Double, onClick: () -> Unit) {
+    Card(
+        Modifier
+            .size(44.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                "\u25B2",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color(0xFFF2F4F8),
+                modifier = Modifier.rotate(-bearing.toFloat()),
             )
         }
     }
