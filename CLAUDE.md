@@ -102,7 +102,10 @@ self-defeating.** So everything sensitive is on-device.
   tells a current copy by a `.stamp` file holding the install's
   `lastUpdateTime`. The release build is **arm64-v8a only** (`abiFilters`);
   debug keeps x86_64 for emulators. Bundled assets are also copied to `filesDir`,
-  so on-device storage is roughly APK + extracted data. Remaining levers: drop
+  so on-device storage is roughly APK + extracted data. The tiles drop the
+  OpenMapTiles layers the style never reads (`EXCLUDE_LAYERS` in
+  `build_map_assets.sh`: poi, housenumber, … were ~half the tile bytes); add a
+  layer to the style → take it off that list. Remaining levers: drop
   the bundled `.pbf` (the cache fingerprint is a content hash of it, so that
   needs a build-time fingerprint instead), a more compact cache format, and
   trimming the tile zoom range / bounding box.
@@ -356,7 +359,10 @@ Track progress against this list when picking the project back up:
       builds the APK, and publishes it to GitHub Releases. Outputs are named
       `schattenweg-<variant>.apk` (`base.archivesName`), not `app-<variant>.apk`.
       Tags and `main` pushes are signed with the release key from repo secrets
-      (see SECURITY.md); other refs are debug-signed. The rolling asset is
+      (see SECURITY.md); other refs are debug-signed. A scheduled run (Mondays
+      05:17 UTC) rebuilds the rolling `latest` from `main` the same way, so its
+      OSM data stays current when nobody pushes; GitHub pauses scheduled runs
+      after 60 days of repo inactivity. The rolling asset is
       `schattenweg-latest.apk` (keep that name stable: the README and the
       in-app link use it). Tagged releases ship `schattenweg.apk`, a fixed
       name so `releases/latest/download/schattenweg.apk` is always a direct
@@ -376,8 +382,9 @@ markers and coverage wedges, AI-zone circles and their cards, search, the
 Low/Medium/High routes (the same A→B was 1256 m / 32% under watch at Low and
 1708 m / 7% at High), the layers/About panel, the compressed graph cache
 (second launch as fast as the first) and the data-freshness line all work. The
-Vulkan path is no longer unexercised. Not yet covered: other devices and OS
-versions, GrapheneOS specifically, low-RAM phones, battery.
+Vulkan path is no longer unexercised. Also checked on **GrapheneOS** (2026-10-11): install, rendering, first and
+second launch, search and the permission set all work there too. Not yet
+covered: other devices and OS versions, low-RAM phones, battery.
 
 Three bugs that only appear on-device were found in that first run, all worth
 remembering because none could fail a unit test:
@@ -419,7 +426,7 @@ often rather than saving up: when a user-visible feature or fix has landed on
 `main` and CI is green, or several commits have accumulated since the last tag
 (`git log $(git describe --tags --abbrev=0)..origin/main`), say so and propose
 the next version. The app has now run on a real phone (see §7), so 1.0.0 is a
-judgement call about breadth of testing (more devices, GrapheneOS), not a
+judgement call about breadth of testing (more devices), not a
 hardware blocker. Bump `versionName` and `versionCode`
 (never decrease the code) in `app/build.gradle.kts` before tagging. The user
 pushes the tag themselves; tag pushes from a cloud session are usually blocked.
