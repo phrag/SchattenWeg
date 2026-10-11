@@ -102,7 +102,8 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
             basemapReady.value = true
 
             val pbf = assets.routingPbf
-            if (pbf == null) {
+            val cache = assets.routingCache
+            if (cache == null) {
                 _state.value = UiState.Error(
                     "No Berlin map data bundled. Run scripts/build_map_assets.sh and rebuild.",
                 )
@@ -110,13 +111,17 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _state.value = try {
-                // open() reuses a cached scored graph when one is valid,
-                // skipping the several-second exposure pass on every cold start
-                // after the first. The cache lives beside the snapshot in
-                // private storage; on a miss the core rebuilds and rewrites it.
-                val cachePath = assets.routingCache!!.absolutePath
                 val r = withContext(Dispatchers.Default) {
-                    Router.open(pbf.absolutePath, cachePath)
+                    if (pbf != null) {
+                        // Only an extract was bundled: open() reuses a valid
+                        // cached scored graph, and otherwise scores one from
+                        // the extract and writes it for next time.
+                        Router.open(pbf.absolutePath, cache.absolutePath)
+                    } else {
+                        // The normal build: the bundled cache is the routing
+                        // data, and there is no extract to fall back to.
+                        Router.openCache(cache.absolutePath)
+                    }
                 }
                 router = r
                 // The map almost certainly asked for cameras while this was

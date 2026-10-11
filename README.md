@@ -192,7 +192,7 @@ so rustup installs them on the first build; you don't need `rustup target add`.
 
 1. **Build the map data + tiles**
    ```bash
-   ./scripts/build_map_assets.sh     # → data/berlin-routing.osm.pbf + offline tiles
+   ./scripts/build_map_assets.sh     # → routing cache + offline tiles
    ```
    It downloads ~70 MB from Geofabrik, verifies it against the published MD5,
    filters it to streets + cameras, renders offline tiles with Planetiler, and
@@ -205,7 +205,7 @@ so rustup installs them on the first build; you don't need `rustup target add`.
    | `REFRESH=1` | Discard a cached extract and fetch the **current** one, so the bundled cameras are the latest OSM has |
    | `EXTRACT_URL=<url>` | Fetch the extract from a mirror instead |
    | `SKIP_TILES=1` | Stop after the routing snapshot — the app still routes, on a plain background |
-   | `SKIP_CACHE=1` | Skip pre-building the routing cache (the app then scores on first launch) |
+   | `SKIP_CACHE=1` | Skip pre-building the routing cache: the extract is bundled instead and the app scores the graph itself on first launch |
    | `PLANETILER_VERSION=vX.Y.Z` | Pin a different Planetiler release |
    | `RETRIES=<n>` | Download attempts per file (default 5) |
 
@@ -351,11 +351,13 @@ Schattenweg is **GPL-3.0-or-later** (see [`LICENSE`](LICENSE)).
 Map data is **© OpenStreetMap contributors**, available under the
 [Open Database Licence (ODbL) 1.0](https://www.openstreetmap.org/copyright); the
 basemap tiles are generated from the [OpenMapTiles](https://openmaptiles.org/)
-schema (CC-BY 4.0). The bundled Berlin extract
-(`data/berlin-routing.osm.pbf`) is a **derived database** and is likewise
+schema (CC-BY 4.0). The bundled Berlin routing data
+(`berlin-routing.graphcache`, built from the filtered extract
+`data/berlin-routing.osm.pbf`) is a **derived database** and is likewise
 offered under the ODbL — regenerate it from current OpenStreetMap data with
-[`scripts/build_map_assets.sh`](scripts/build_map_assets.sh), or take it from a
-[release](https://github.com/phrag/SchattenWeg/releases)'s attached assets.
+[`scripts/build_map_assets.sh`](scripts/build_map_assets.sh), or take the
+`.graphcache` out of a [release](https://github.com/phrag/SchattenWeg/releases)'s
+APK (`assets/map/`).
 
 The libraries, fonts and crates bundled in the app carry their own licences,
 all compatible with the above — they're listed in

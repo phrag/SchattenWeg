@@ -18,9 +18,11 @@
 //!
 //! Format: a small hand-rolled little-endian binary blob. No serialisation
 //! dependency, and full control over versioning and validation — the header
-//! carries a format/logic version and a fingerprint of the source extract, and
-//! any mismatch (or any malformed byte) makes the reader fail so the caller
-//! rebuilds from the PBF. The file is app-private (`filesDir`), so this
+//! carries a format/logic version, a fingerprint of the source extract and a
+//! signature of the zone table, and any mismatch (or any malformed byte) makes
+//! the reader fail so the caller rebuilds from the PBF. An app that ships the
+//! cache *without* the extract (it is the cache that is the routing data there)
+//! checks everything but the source fingerprint: see [`read_without_source`]. The file is app-private (`filesDir`), so this
 //! validation is about staleness and truncation, not untrusted input.
 
 use crate::camera::{Camera, CameraKind};
@@ -38,7 +40,11 @@ const MAGIC: &[u8; 4] = b"SWGC";
 /// sampling in `exposure.rs`). The cached edge exposures are only as current as
 /// the code that wrote them; bumping the version invalidates every old cache so
 /// a stale score can never outlive the logic that produced it.
-const VERSION: u32 = 5;
+///
+/// 6: the header holds the source fingerprint and the zone-table signature as
+/// two fields (it used to hold their XOR), so a cache can be checked against
+/// the zone table without the extract it was built from.
+const VERSION: u32 = 6;
 
 /// The five flat vectors a `Router` is assembled from. This is exactly what the
 /// PBF ingest produces (with edges already scored) and exactly what the cache
@@ -53,11 +59,14 @@ pub struct Parts {
     pub occluders: Vec<Ring>,
 }
 
-/// Serialise `parts` to `w`, tagged with `fingerprint` (see [`fingerprint`]).
-pub fn write<W: Write>(w: &mut W, parts: &Parts, fingerprint: u64) -> io::Result<()> {
+/// Serialise `parts` to `w`, tagged with the `source` fingerprint (see
+/// [`fingerprint`]) and the `zones` signature of the zone table it was scored
+/// against.
+pub fn write<W: Write>(w: &mut W, parts: &Parts, source: u64, zones: u64) -> io::Result<()> {
     w.write_all(MAGIC)?;
     write_u32(w, VERSION)?;
-    write_u64(w, fingerprint)?;
+    write_u64(w, source)?;
+    write_u64(w, zones)?;
 
     write_u64(w, parts.nodes.len() as u64)?;
     for n in &parts.nodes {
@@ -114,10 +123,23 @@ pub fn write<W: Write>(w: &mut W, parts: &Parts, fingerprint: u64) -> io::Result
 }
 
 /// Read parts back, requiring the header magic and `VERSION` to match and the
-/// stored fingerprint to equal `expected_fingerprint`. Any mismatch, short
-/// read, or out-of-range tag is an `InvalidData` error so the caller falls back
-/// to rebuilding from the PBF.
-pub fn read<R: Read>(r: &mut R, expected_fingerprint: u64) -> io::Result<Parts> {
+/// stored `source` fingerprint and `zones` signature to equal the expected
+/// ones. Any mismatch, short read, or out-of-range tag is an `InvalidData`
+/// error so the caller falls back to rebuilding from the PBF.
+pub fn read<R: Read>(r: &mut R, source: u64, zones: u64) -> io::Result<Parts> {
+    read_checked(r, Some(source), zones)
+}
+
+/// Like [`read`], but without comparing the source fingerprint, for an app that
+/// ships the cache without the extract: there is no file to hash, and the cache
+/// *is* the routing data. The version and the zone signature are still
+/// checked, so a cache written by older logic, or against another zone table,
+/// is rejected.
+pub fn read_without_source<R: Read>(r: &mut R, zones: u64) -> io::Result<Parts> {
+    read_checked(r, None, zones)
+}
+
+fn read_checked<R: Read>(r: &mut R, source: Option<u64>, zones: u64) -> io::Result<Parts> {
     let mut magic = [0u8; 4];
     r.read_exact(&mut magic)?;
     if &magic != MAGIC {
@@ -126,8 +148,12 @@ pub fn read<R: Read>(r: &mut R, expected_fingerprint: u64) -> io::Result<Parts> 
     if read_u32(r)? != VERSION {
         return Err(bad("cache version mismatch"));
     }
-    if read_u64(r)? != expected_fingerprint {
+    let stored_source = read_u64(r)?;
+    if source.is_some_and(|expected| stored_source != expected) {
         return Err(bad("cache is stale (source extract changed)"));
+    }
+    if read_u64(r)? != zones {
+        return Err(bad("cache is stale (zone table changed)"));
     }
 
     let node_count = read_len(r)?;
@@ -387,8 +413,8 @@ mod tests {
 
     fn assert_round_trips(parts: &Parts) {
         let mut buf = Vec::new();
-        write(&mut buf, parts, 0xdead_beef).unwrap();
-        let back = read(&mut &buf[..], 0xdead_beef).unwrap();
+        write(&mut buf, parts, 0xdead_beef, 0xfeed).unwrap();
+        let back = read(&mut &buf[..], 0xdead_beef, 0xfeed).unwrap();
 
         assert_eq!(back.nodes.len(), parts.nodes.len());
         for (a, b) in back.nodes.iter().zip(&parts.nodes) {
@@ -435,45 +461,81 @@ mod tests {
 
     #[test]
     fn rejects_the_previous_format_version() {
-        // A v4 cache was scored with indoor cameras still in the set; it must
+        // A v5 cache keeps one XOR fingerprint where v6 has two fields; it must
         // never be read back as current.
         let mut buf = Vec::new();
-        write(&mut buf, &sample(), 1).unwrap();
-        buf[4..8].copy_from_slice(&4u32.to_le_bytes());
-        let err = read(&mut &buf[..], 1).unwrap_err();
+        write(&mut buf, &sample(), 1, 9).unwrap();
+        buf[4..8].copy_from_slice(&5u32.to_le_bytes());
+        let err = read(&mut &buf[..], 1, 9).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
     #[test]
     fn rejects_truncation_inside_the_building_section() {
         let mut buf = Vec::new();
-        write(&mut buf, &sample(), 1).unwrap();
+        write(&mut buf, &sample(), 1, 9).unwrap();
         buf.truncate(buf.len() - 5);
-        assert!(read(&mut &buf[..], 1).is_err());
+        assert!(read(&mut &buf[..], 1, 9).is_err());
     }
 
     #[test]
     fn rejects_a_different_fingerprint() {
         let mut buf = Vec::new();
-        write(&mut buf, &sample(), 1).unwrap();
-        let err = read(&mut &buf[..], 2).unwrap_err();
+        write(&mut buf, &sample(), 1, 9).unwrap();
+        let err = read(&mut &buf[..], 2, 9).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn rejects_a_different_zone_signature() {
+        let mut buf = Vec::new();
+        write(&mut buf, &sample(), 1, 9).unwrap();
+        let err = read(&mut &buf[..], 1, 10).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        let err = read_without_source(&mut &buf[..], 10).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn reads_without_the_source_fingerprint() {
+        // Whatever source the cache was built from, it reads back when the zone
+        // table matches: the extract is not shipped to hash.
+        for source in [0, 1, u64::MAX] {
+            let mut buf = Vec::new();
+            write(&mut buf, &sample(), source, 9).unwrap();
+            let back = read_without_source(&mut &buf[..], 9).expect("reads");
+            assert_eq!(back.nodes.len(), sample().nodes.len());
+        }
+    }
+
+    #[test]
+    fn read_without_source_still_rejects_damage() {
+        let mut buf = Vec::new();
+        write(&mut buf, &sample(), 1, 9).unwrap();
+        let mut bad_magic = buf.clone();
+        bad_magic[0] = b'X';
+        assert!(read_without_source(&mut &bad_magic[..], 9).is_err());
+        let mut old = buf.clone();
+        old[4..8].copy_from_slice(&5u32.to_le_bytes());
+        assert!(read_without_source(&mut &old[..], 9).is_err());
+        buf.truncate(buf.len() / 2);
+        assert!(read_without_source(&mut &buf[..], 9).is_err());
     }
 
     #[test]
     fn rejects_a_bad_magic() {
         let mut buf = Vec::new();
-        write(&mut buf, &sample(), 1).unwrap();
+        write(&mut buf, &sample(), 1, 9).unwrap();
         buf[0] = b'X';
-        assert!(read(&mut &buf[..], 1).is_err());
+        assert!(read(&mut &buf[..], 1, 9).is_err());
     }
 
     #[test]
     fn rejects_truncation() {
         let mut buf = Vec::new();
-        write(&mut buf, &sample(), 1).unwrap();
+        write(&mut buf, &sample(), 1, 9).unwrap();
         buf.truncate(buf.len() / 2);
-        assert!(read(&mut &buf[..], 1).is_err());
+        assert!(read(&mut &buf[..], 1, 9).is_err());
     }
 
     #[test]
