@@ -12,9 +12,9 @@ going, the route you take — ever leaves the device. The app doesn't even hold
 the permission to reach the internet.
 
 <p align="center">
-  <a href="https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk"><b>⬇&nbsp;Download the latest APK</b></a>
+  <a href="https://github.com/phrag/SchattenWeg/releases/latest"><b>⬇&nbsp;Download the latest release</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/phrag/SchattenWeg/releases/tag/latest">release notes</a>
+  <a href="https://github.com/phrag/SchattenWeg/releases/tag/latest">development build</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/phrag/SchattenWeg/releases">all versions</a>
 </p>
@@ -44,11 +44,14 @@ the permission to reach the internet.
 
 ## Download & install
 
-1. **[Download the latest APK](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk)**
-   — a direct link, rebuilt on every push to `main`, so it is always the newest
-   build. (Its [release page](https://github.com/phrag/SchattenWeg/releases/tag/latest)
-   says which commit and OSM snapshot it carries.)
-   - Want a fixed version instead? Tagged builds like `v0.1.0` are on the
+1. **[Download the latest release](https://github.com/phrag/SchattenWeg/releases/latest)**
+   — the newest signed version, with the APK attached. Its release notes say
+   which commit and OSM snapshot it carries.
+   - Want the newest unreleased code instead? The
+     **[development build](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk)**
+     is a debug-signed APK rebuilt on every push to `main`
+     ([notes](https://github.com/phrag/SchattenWeg/releases/tag/latest)).
+   - Want an older version? Every tagged build is on the
      **[Releases page](https://github.com/phrag/SchattenWeg/releases)**.
 2. Copy it to your phone and tap it. Android will ask you to allow installing
    from this source — that's the normal sideloading prompt for an app that
@@ -169,7 +172,7 @@ All of these are shown inside the app, on purpose.
 ---
 
 > **The rest of this page is for developers.** If you just want to use the app,
-> you're all set — [grab the latest APK](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest-debug.apk)
+> you're all set — [grab the latest release](https://github.com/phrag/SchattenWeg/releases/latest)
 > and go.
 
 ## Build from source
