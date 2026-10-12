@@ -438,7 +438,8 @@ often rather than saving up: when a user-visible feature or fix has landed on
 the next version. The app has now run on a real phone (see §7), so 1.0.0 is a
 judgement call about breadth of testing (more devices), not a
 hardware blocker. Bump `versionName` and `versionCode`
-(never decrease the code) in `app/build.gradle.kts` before tagging. The user
+(never decrease the code) in `app/build.gradle.kts` before tagging. Also add a `## <version>` section to
+`CHANGELOG.md`: the tag run puts it at the top of the release notes. The user
 pushes the tag themselves; tag pushes from a cloud session are usually blocked.
 
 **Deliberately deferred:** cycling profile, location puck ("centre on me"),
