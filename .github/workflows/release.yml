@@ -271,6 +271,22 @@ jobs:
             echo "Fully offline: the app declares no \`INTERNET\` permission."
             echo "Berlin only, for now."
           } > release-notes.md
+
+          # A tagged release leads with its CHANGELOG.md section (## <version>).
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+            awk -v v="$version" '
+              $1 == "##" && $2 == v { on = 1; next }
+              $1 == "##" { on = 0 }
+              on
+            ' CHANGELOG.md > changelog-section.md
+            if grep -q '[^[:space:]]' changelog-section.md; then
+              { cat changelog-section.md; echo; cat release-notes.md; } > release-notes.new
+              mv release-notes.new release-notes.md
+            else
+              echo "::warning::CHANGELOG.md has no '## $version' section"
+            fi
+          fi
           echo "--- release notes ---"; cat release-notes.md
 
       # Rolling "latest": move the tag to this commit by replacing the release.
