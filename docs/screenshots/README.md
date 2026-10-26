@@ -38,4 +38,13 @@ Tips for good screenshots:
 - PNG is preferred; keep each file under ~1 MB if you can (resize to ~1080 px
   wide is plenty).
 
+- **Strip all metadata before committing.** Phone screenshots can carry EXIF
+  (device IDs, timestamps, sometimes GPS). Re-encode without it and check that
+  only image chunks are left:
+
+  ```bash
+  python3 -c "import sys; from PIL import Image; Image.open(sys.argv[1]).convert('RGB').quantize(256).save(sys.argv[2], optimize=True)" in.png docs/screenshots/NN-name.png
+  exiftool docs/screenshots/NN-name.png   # or: pngcheck -v — expect only IHDR, PLTE, IDAT, IEND
+  ```
+
 Only reference a screenshot from the README once the file is committed.
