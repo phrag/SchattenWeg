@@ -28,6 +28,7 @@
 use crate::camera::{Camera, CameraKind};
 use crate::exposure::{Edge, Node};
 use crate::occluders::Ring;
+use crate::osm::MAX_TAG_BYTES;
 use crate::places::{Place, PlaceKind};
 use std::io::{self, Read, Write};
 
@@ -47,7 +48,8 @@ const MAGIC: &[u8; 4] = b"SWGC";
 /// 7: each camera carries an `ai` flag (`camera:features`), and German compass
 /// points (`O`, `NO`, `SO`) parse as `camera:direction`, which turns some
 /// discs into cones.
-const VERSION: u32 = 7;
+/// 8: each camera carries optional `manufacturer` and `model` strings.
+const VERSION: u32 = 8;
 
 /// The five flat vectors a `Router` is assembled from. This is exactly what the
 /// PBF ingest produces (with edges already scored) and exactly what the cache
@@ -102,6 +104,8 @@ pub fn write<W: Write>(w: &mut W, parts: &Parts, source: u64, zones: u64) -> io:
         write_f64(w, c.half_fov_deg)?;
         write_f64(w, c.range_m)?;
         w.write_all(&[u8::from(c.ai)])?;
+        write_opt_str(w, c.manufacturer.as_deref())?;
+        write_opt_str(w, c.model.as_deref())?;
     }
 
     write_u64(w, parts.places.len() as u64)?;
@@ -200,6 +204,8 @@ fn read_checked<R: Read>(r: &mut R, source: Option<u64>, zones: u64) -> io::Resu
             1 => true,
             _ => return Err(bad("invalid camera ai flag")),
         };
+        let manufacturer = read_opt_str(r)?;
+        let model = read_opt_str(r)?;
         cameras.push(Camera {
             osm_id,
             lat,
@@ -209,6 +215,8 @@ fn read_checked<R: Read>(r: &mut R, source: Option<u64>, zones: u64) -> io::Resu
             half_fov_deg,
             range_m,
             ai,
+            manufacturer,
+            model,
         });
     }
 
@@ -280,6 +288,28 @@ const MAX_PREALLOC: usize = 1 << 20;
 
 /// The same cap for one building ring's vertices (real ones have a few dozen).
 const MAX_RING_PREALLOC: usize = 1 << 12;
+
+/// An optional string: a `u32` byte length (0 = none) then the UTF-8 bytes.
+fn write_opt_str<W: Write>(w: &mut W, s: Option<&str>) -> io::Result<()> {
+    let bytes = s.unwrap_or("").as_bytes();
+    write_u32(w, bytes.len() as u32)?;
+    w.write_all(bytes)
+}
+
+fn read_opt_str<R: Read>(r: &mut R) -> io::Result<Option<String>> {
+    let len = read_u32(r)? as usize;
+    if len == 0 {
+        return Ok(None);
+    }
+    if len > MAX_TAG_BYTES {
+        return Err(bad("camera tag string too long"));
+    }
+    let mut buf = vec![0u8; len];
+    r.read_exact(&mut buf)?;
+    String::from_utf8(buf)
+        .map(Some)
+        .map_err(|_| bad("camera tag string is not UTF-8"))
+}
 
 fn read_len<R: Read>(r: &mut R) -> io::Result<usize> {
     Ok(read_u64(r)? as usize)
@@ -398,6 +428,8 @@ mod tests {
                     half_fov_deg: 30.0,
                     range_m: 25.0,
                     ai: true,
+                    manufacturer: Some("Axis".into()),
+                    model: Some("P3245-V".into()),
                 },
                 Camera {
                     osm_id: 9,
@@ -408,6 +440,8 @@ mod tests {
                     half_fov_deg: 0.0,
                     range_m: 15.0,
                     ai: false,
+                    manufacturer: None,
+                    model: None,
                 },
             ],
             places: vec![Place {
@@ -447,6 +481,8 @@ mod tests {
             assert_eq!(a.half_fov_deg, b.half_fov_deg);
             assert_eq!(a.range_m, b.range_m);
             assert_eq!(a.ai, b.ai);
+            assert_eq!(a.manufacturer, b.manufacturer);
+            assert_eq!(a.model, b.model);
         }
         assert_eq!(back.places.len(), parts.places.len());
         for (a, b) in back.places.iter().zip(&parts.places) {

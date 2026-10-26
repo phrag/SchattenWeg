@@ -55,6 +55,10 @@ pub struct Camera {
     /// `osm::has_ai_feature`). Display only: coverage and scoring are the
     /// same as for any other camera.
     pub ai: bool,
+    /// Maker, from `manufacturer` (else `brand`), when mapped. Display only.
+    pub manufacturer: Option<String>,
+    /// Model, from `camera:model` (else `model`), when mapped. Display only.
+    pub model: Option<String>,
 }
 
 impl Camera {
@@ -155,6 +159,8 @@ mod tests {
             half_fov_deg: 30.0,
             range_m: 50.0,
             ai: false,
+            manufacturer: None,
+            model: None,
         }
     }
 

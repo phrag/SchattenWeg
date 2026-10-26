@@ -47,6 +47,7 @@ Our ingest paths (see `scripts/` and `core/src/osm.rs`):
 | `camera:type=fixed\|dome\|panning` | cone vs disc coverage |
 | `camera:direction=<deg or compass>` | cone centre bearing (0=N, 90=E); German `O`/`NO`/`SO` accepted |
 | `camera:features=artificial intelligence\|facedetection\|…` | `Camera::ai` (`osm::has_ai_feature`): drawn violet with an "AI analysis" card. **Display only**, scored like any camera. Kottbusser Tor's 30 police AI cameras are mapped this way (Oct 2026) |
+| `manufacturer` → `brand`, `camera:model` → `model` | `Camera::manufacturer` / `model`: shown on the long-press card only when mapped (no empty rows); trimmed, capped at 80 bytes, cached (v8). **Display only** |
 | `surveillance=indoor` | **dropped**: it watches the inside of a building, not the street (a disc would also cut through walls) |
 | `surveillance=public\|outdoor\|traffic` (or untagged) | kept; context only, not required |
 | `building=*` (not `no`) | closed way, or `type=multipolygon` relation with closed outer ways: **blocks a camera's view** if tall enough (below) |
