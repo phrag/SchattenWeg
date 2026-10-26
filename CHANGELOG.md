@@ -14,6 +14,10 @@ Add the section before pushing the tag.
 - Camera directions written as German compass points (`O`, `NO`, `SO`) are now
   understood, so those cameras are drawn as wedges instead of full circles.
 - Fresh OpenStreetMap camera data.
+- The **Nightly** build (the rolling `latest` download) is now rebuilt every
+  night instead of weekly, so its cameras are at most a day behind
+  OpenStreetMap. The README offers Stable and Nightly side by side, each with
+  its build date and camera count.
 
 ## 0.2.2
 
