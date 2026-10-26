@@ -364,7 +364,8 @@ Two kinds of release, both release-key-signed, both built by
 
 - **Nightly** — the rolling pre-release tagged `latest`, asset
   `schattenweg-latest.apk`. Rebuilt on every push to `main` **and every night at
-  02:17 UTC**, so its cameras are never more than a day behind OpenStreetMap.
+  05:07 UTC** (after Geofabrik's daily extract), with its cameras pulled live
+  from OpenStreetMap at build time.
   The tag and asset names never change (the README and the in-app **About**
   link depend on them — don't put the commit in either). GitHub pauses
   scheduled runs after 60 days without repository activity; any push resumes

@@ -26,11 +26,13 @@ on:
     branches: ["main"]
     tags: ["v*"]
   schedule:
-    # Nightly, 02:17 UTC: after Geofabrik's daily Berlin extract (cut from the
-    # previous day's OSM data) and off the hour, when scheduled runs queue up.
+    # Nightly, 05:07 UTC: after Geofabrik's daily Berlin extract, which was
+    # observed published at 03:27 UTC (one day's sample), leaving margin for a
+    # late publish; off the hour, when scheduled runs queue up. Cameras are
+    # pulled live from Overpass regardless; the extract supplies roads/buildings.
     # GitHub switches scheduled workflows off after 60 days without repository
     # activity; any push re-enables them.
-    - cron: "17 2 * * *"
+    - cron: "7 5 * * *"
   workflow_dispatch:
 
 # Creating a release and uploading assets needs write access to the repo's
