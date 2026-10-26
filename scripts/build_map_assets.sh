@@ -323,10 +323,15 @@ CACHE_ASSET="$ASSETS/berlin-routing.graphcache"
 ROUTING_ASSET="$ASSETS/berlin-routing.osm.pbf"
 rm -f "$CACHE_ASSET" "$ROUTING_ASSET"
 cache_built=0
+# The cameras the app actually routes around (after dropping indoor, ALPR,
+# guards), as counted by the core: build_cache prints "...: N cameras, ...".
+routed_cameras=""
 if [[ "${SKIP_CACHE:-0}" != "1" ]]; then
     if command -v cargo >/dev/null 2>&1; then
-        if cargo run --quiet --release --manifest-path "$ROOT/core/Cargo.toml" \
-            --example build_cache -- "$ROUTING" "$CACHE_ASSET"; then
+        if cache_out="$(cargo run --quiet --release --manifest-path "$ROOT/core/Cargo.toml" \
+            --example build_cache -- "$ROUTING" "$CACHE_ASSET")"; then
+            echo "$cache_out"
+            routed_cameras="$(sed -nE 's/.*: ([0-9]+) cameras,.*/\1/p' <<<"$cache_out" | head -1)"
             cache_built=1
         else
             echo "WARNING: cache pre-build failed"
@@ -369,12 +374,13 @@ fi
     echo "built_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "osm_snapshot=$osm_snapshot"
     echo "surveillance_nodes=$cameras"
+    echo "cameras=${routed_cameras:-unknown}"
     echo "extract_source=$GEOFABRIK"
 } > "$BUILD_INFO"
 # The app shows how fresh its data is (About panel), so the two dates travel
 # inside the APK too. Dates only: nothing else from build-info.txt is shipped.
 grep -E '^(osm_snapshot|built_utc)=' "$BUILD_INFO" > "$ASSETS/data-info.txt"
-echo "   cameras: $cameras surveillance nodes  |  OSM snapshot: $osm_snapshot"
+echo "   cameras: ${routed_cameras:-unknown} routed ($cameras surveillance nodes)  |  OSM snapshot: $osm_snapshot"
 echo "   provenance written to $BUILD_INFO"
 
 # --- 3. Label glyphs ---------------------------------------------------------

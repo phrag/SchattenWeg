@@ -4,15 +4,15 @@ name: Release
 # build is always one download away (linked from inside the app — see
 # MapScreen.kt's ProjectLink). Three shapes of release:
 #
-#   * push to main  -> a rolling "latest" pre-release (release-key-signed),
-#                      retagged to the new commit, so the newest build is
-#                      always downloadable at the stable URL linked from the
-#                      README:
+#   * push to main  -> the rolling NIGHTLY pre-release (release-key-signed),
+#                      tag "latest", retagged to the new commit, so the newest
+#                      build is always downloadable at the stable URL linked
+#                      from the README and the app:
 #                      /releases/download/latest/schattenweg-latest.apk
-#   * every Monday  -> the same rolling "latest" rebuild from the unchanged
-#                      main, so its cameras stay current when nobody pushes
+#   * every night   -> the same nightly rebuild from the unchanged main, so
+#                      its cameras are never more than a day behind OSM
 #                      (scheduled runs always use the default branch)
-#   * push a v* tag -> a permanent, versioned release for that tag
+#   * push a v* tag -> a permanent STABLE release for that tag
 #   * manual run    -> a throwaway build-<run> pre-release
 #
 # Every run regenerates the offline Berlin assets from a freshly downloaded
@@ -25,10 +25,11 @@ on:
     branches: ["main"]
     tags: ["v*"]
   schedule:
-    # Mondays 05:17 UTC (off the hour, when scheduled runs queue up). GitHub
-    # switches scheduled workflows off after 60 days without repository
+    # Nightly, 02:17 UTC: after Geofabrik's daily Berlin extract (cut from the
+    # previous day's OSM data) and off the hour, when scheduled runs queue up.
+    # GitHub switches scheduled workflows off after 60 days without repository
     # activity; any push re-enables them.
-    - cron: "17 5 * * 1"
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
 # Creating a release and uploading assets needs write access to the repo's
@@ -203,19 +204,28 @@ jobs:
           set -euo pipefail
           short_sha="${GITHUB_SHA::7}"
 
-          osm_snapshot="unknown"; cameras="unknown"; built_utc="unknown"
+          osm_snapshot="unknown"; cameras="unknown"; surveillance="unknown"; built_utc="unknown"
           if [ -f data/build-info.txt ]; then
             # shellcheck disable=SC1091
             . data/build-info.txt
             osm_snapshot="${osm_snapshot:-unknown}"
-            cameras="${surveillance_nodes:-unknown}"
+            surveillance="${surveillance_nodes:-unknown}"
+            cameras="${cameras:-unknown}"
             built_utc="${built_utc:-unknown}"
           fi
+
+          # Published next to the APK: the README's badges read the build date
+          # and camera count from it (shields.io dynamic JSON badges).
+          jq -n --arg built "${built_utc%%T*}" --arg osm "${osm_snapshot%%T*}" \
+            --arg cameras "$cameras" --arg commit "$short_sha" \
+            '{built: $built, osm_snapshot: $osm, cameras: $cameras, commit: $commit}' \
+            > build-info.json
+          cat build-info.json
 
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             tag="$GITHUB_REF_NAME"; prerelease=false; title="$GITHUB_REF_NAME"; label="$GITHUB_REF_NAME"
           elif [ "$GITHUB_EVENT_NAME" = "push" ] || [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
-            tag="latest"; prerelease=true; title="Latest build (main@$short_sha)"; label="latest"
+            tag="latest"; prerelease=true; title="Nightly build (main@$short_sha, OSM $osm_snapshot)"; label="latest"
           else
             tag="build-$GITHUB_RUN_NUMBER"; prerelease=true; title="build-$GITHUB_RUN_NUMBER"; label="build-$GITHUB_RUN_NUMBER"
           fi
@@ -253,7 +263,7 @@ jobs:
             echo "| Commit | \`$short_sha\` |"
             echo "| Built (UTC) | $built_utc |"
             echo "| Camera data (OSM snapshot) | $osm_snapshot |"
-            echo "| Cameras bundled | $cameras surveillance nodes |"
+            echo "| Cameras routed around | $cameras (of $surveillance surveillance nodes) |"
             echo ""
             if [ "$GITHUB_REF_TYPE" = "tag" ]; then
               echo "**Signed with the Schattenweg release key.** Verify the"
@@ -297,7 +307,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release delete latest --cleanup-tag --yes || true
-          gh release create latest "${{ steps.meta.outputs.apk }}" \
+          gh release create latest "${{ steps.meta.outputs.apk }}" build-info.json \
             --target "$GITHUB_SHA" \
             --title "${{ steps.meta.outputs.title }}" \
             --notes-file release-notes.md \
@@ -314,8 +324,8 @@ jobs:
           set -euo pipefail
           flags=(--title "${{ steps.meta.outputs.title }}" --notes-file release-notes.md)
           [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
-          gh release create "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" "${flags[@]}" \
-            || gh release upload "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" --clobber
+          gh release create "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" build-info.json "${flags[@]}" \
+            || gh release upload "${{ steps.meta.outputs.tag }}" "${{ steps.meta.outputs.apk }}" build-info.json --clobber
 
       # Also attach the APK to the workflow run, so it is retrievable even if the
       # release step is skipped (e.g. a fork without contents:write).

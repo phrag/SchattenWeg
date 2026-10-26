@@ -367,10 +367,12 @@ Track progress against this list when picking the project back up:
       builds the APK, and publishes it to GitHub Releases. Outputs are named
       `schattenweg-<variant>.apk` (`base.archivesName`), not `app-<variant>.apk`.
       Tags and `main` pushes are signed with the release key from repo secrets
-      (see SECURITY.md); other refs are debug-signed. A scheduled run (Mondays
-      05:17 UTC) rebuilds the rolling `latest` from `main` the same way, so its
-      OSM data stays current when nobody pushes; GitHub pauses scheduled runs
-      after 60 days of repo inactivity. The rolling asset is
+      (see SECURITY.md); other refs are debug-signed. A scheduled run (**nightly**,
+      02:17 UTC) rebuilds the rolling `latest` from `main` the same way, so its
+      cameras are at most a day behind OSM even when nobody pushes; GitHub
+      pauses scheduled runs after 60 days of repo inactivity. The README calls
+      this rolling build **Nightly** and the tagged ones **Stable**; the tag
+      stays `latest` because the links depend on it. The rolling asset is
       `schattenweg-latest.apk` (keep that name stable: the README and the
       in-app link use it). Tagged releases ship `schattenweg.apk`, a fixed
       name so `releases/latest/download/schattenweg.apk` is always a direct
