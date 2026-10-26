@@ -45,6 +45,8 @@ impl From<osmpbf::Error> for OsmError {
 ///     street behind them.
 ///   * `camera:features=artificial intelligence|facedetection|…` — sets
 ///     [`Camera::ai`] (see [`has_ai_feature`]); display only.
+///   * `manufacturer` (else `brand`), `camera:model` (else `model`) — shown on
+///     the camera card when present; display only.
 pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(&str, &str)]) -> Option<Camera> {
     let get = |k: &str| tags.iter().find(|(tk, _)| *tk == k).map(|&(_, v)| v);
 
@@ -79,7 +81,28 @@ pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(&str, &str)]) 
         half_fov_deg: defaults::half_fov_deg(kind),
         range_m: defaults::range_m(kind),
         ai: get("camera:features").is_some_and(has_ai_feature),
+        manufacturer: first_text(&[get("manufacturer"), get("brand")]),
+        model: first_text(&[get("camera:model"), get("model")]),
     })
+}
+
+/// Longest manufacturer/model text kept, in bytes. OSM values are untrusted
+/// free text and end up on a card and in the cache.
+pub const MAX_TAG_BYTES: usize = 80;
+
+/// The first non-blank value, trimmed and cut to [`MAX_TAG_BYTES`] on a
+/// character boundary.
+fn first_text(values: &[Option<&str>]) -> Option<String> {
+    let v = values
+        .iter()
+        .flatten()
+        .map(|v| v.trim())
+        .find(|v| !v.is_empty())?;
+    let mut end = v.len().min(MAX_TAG_BYTES);
+    while !v.is_char_boundary(end) {
+        end -= 1;
+    }
+    Some(v[..end].to_string())
 }
 
 /// Does a `camera:features` value (a `;`-separated list) name some kind of
@@ -710,6 +733,41 @@ mod tests {
     }
 
     #[test]
+    fn manufacturer_and_model_come_from_the_first_usable_tag() {
+        let cam = |extra: &[(&'static str, &'static str)]| {
+            let mut tags = vec![("man_made", "surveillance")];
+            tags.extend_from_slice(extra);
+            camera_from_tags(1, 0.0, 0.0, &tags).unwrap()
+        };
+        let none = cam(&[]);
+        assert_eq!((none.manufacturer, none.model), (None, None));
+
+        let c = cam(&[
+            ("manufacturer", " Axis "),
+            ("brand", "Other"),
+            ("camera:model", "P3245"),
+            ("model", "x"),
+        ]);
+        assert_eq!(c.manufacturer.as_deref(), Some("Axis"));
+        assert_eq!(c.model.as_deref(), Some("P3245"));
+
+        let c = cam(&[
+            ("manufacturer", "  "),
+            ("brand", "Bosch"),
+            ("model", "Dinion"),
+        ]);
+        assert_eq!(c.manufacturer.as_deref(), Some("Bosch"));
+        assert_eq!(c.model.as_deref(), Some("Dinion"));
+
+        // Over-long untrusted text is cut on a character boundary.
+        let long = "ä".repeat(100);
+        let leaked: &'static str = Box::leak(long.into_boxed_str());
+        let c = cam(&[("brand", leaked)]);
+        let m = c.manufacturer.unwrap();
+        assert!(m.len() <= MAX_TAG_BYTES && m.chars().all(|ch| ch == 'ä'));
+    }
+
+    #[test]
     fn footways_walkable_motorways_not() {
         assert!(foot_accessible(&[("highway", "footway")]));
         assert!(foot_accessible(&[("highway", "residential")]));
@@ -834,6 +892,8 @@ mod tests {
             half_fov_deg: 30.0,
             range_m: 20.0,
             ai: false,
+            manufacturer: None,
+            model: None,
         }
     }
 

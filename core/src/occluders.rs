@@ -405,6 +405,8 @@ mod tests {
             half_fov_deg: 30.0,
             range_m: range,
             ai: false,
+            manufacturer: None,
+            model: None,
         }
     }
 

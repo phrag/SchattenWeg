@@ -1185,6 +1185,15 @@ private fun CompassButton(bearing: Double, onClick: () -> Unit) {
     }
 }
 
+@Composable
+private fun CameraDetailRow(label: String, value: String) {
+    Text(
+        "$label: $value",
+        style = MaterialTheme.typography.bodySmall,
+        color = Color(0xFFC7D0DA),
+    )
+}
+
 /**
  * What this app knows about one camera, and what it is only assuming.
  *
@@ -1223,6 +1232,10 @@ private fun CameraInfoCard(camera: Camera, onDismiss: () -> Unit) {
                     color = Color(0xFFB48CF2),
                 )
             }
+
+            // Only what OSM carries: a row only for a tag that is mapped.
+            camera.manufacturer?.let { CameraDetailRow("Manufacturer", it) }
+            camera.model?.let { CameraDetailRow("Model", it) }
 
             val dir = camera.directionDeg
             Text(
