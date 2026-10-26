@@ -4,6 +4,21 @@ Each `## <version>` section is used as the top of that release's notes by
 `.github/workflows/release.yml` (the tag `v0.2.2` picks up `## 0.2.2`).
 Add the section before pushing the tag.
 
+## 0.2.4
+
+- **Camera range is now labelled as an assumption, and two Axis models use their datasheets.** The card says the range is roughly face-recognition distance. Cameras tagged AXIS Q3839-PVE (180° panorama, 35 m) or Q1809-LE (90°, 60 m) use those figures instead of the generic 20–30 m and 60° cone; this changes routes around Kottbusser Tor.
+- **AI camera coverage is violet and has its own switch.** The wedges and discs of
+  cameras tagged as running AI analysis now match their violet dots, and a new
+  "AI camera coverage" layer toggle shows or hides them (on by default). Routing
+  is unchanged.
+- **The AI-zone card is worded as a police claim, not a fact.** It no longer
+  states that facial recognition happens there; it says what the police have
+  announced and what is unconfirmed.
+- **The camera card shows manufacturer and model** when OpenStreetMap maps them.
+- Nightly builds now pull cameras live from OpenStreetMap (Overpass) at build
+  time, so the rolling build is at most a day behind the map. Stable builds keep
+  the cameras of the bundled extract.
+
 ## 0.2.3
 
 - **Camera range is now labelled as an assumption, and two Axis models use their datasheets.** The card says the range is roughly face-recognition distance. Cameras tagged AXIS Q3839-PVE (180° panorama, 35 m) or Q1809-LE (90°, 60 m) use those figures instead of the generic 20–30 m and 60° cone; this changes routes around Kottbusser Tor.
