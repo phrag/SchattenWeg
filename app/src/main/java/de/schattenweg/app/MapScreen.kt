@@ -73,6 +73,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.Layer
@@ -357,7 +358,15 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     style.addLayer(
                         CircleLayer(CAMERA_LAYER, CAMERA_SOURCE).withProperties(
                             PropertyFactory.circleRadius(5f),
-                            PropertyFactory.circleColor("#e0575b"),
+                            // Cameras OSM tags as running AI analysis take the
+                            // AI-zone violet; scoring treats them like any other.
+                            PropertyFactory.circleColor(
+                                Expression.switchCase(
+                                    Expression.get("ai"),
+                                    Expression.literal("#b48cf2"),
+                                    Expression.literal("#e0575b"),
+                                ),
+                            ),
                             PropertyFactory.circleOpacity(0.85f),
                             PropertyFactory.circleStrokeWidth(1f),
                             PropertyFactory.circleStrokeColor("#2a0f11"),
@@ -1058,7 +1067,8 @@ private fun AvoidancePanel(
                             "higher. Mapped buildings are assumed to block a " +
                             "camera's view; trees, fences and unmapped buildings " +
                             "do not. Police AI-video zones (purple) are approximate " +
-                            "circles, also avoided. Avoiding them is not anonymity.",
+                            "circles, also avoided; purple dots are cameras OSM " +
+                            "tags as AI. Avoiding them is not anonymity.",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF9AA4B2),
                     )
@@ -1200,10 +1210,19 @@ private fun CameraInfoCard(camera: Camera, onDismiss: () -> Unit) {
                 CameraKind.UNKNOWN -> "Camera, type not mapped"
             }
             Text(
-                kind,
+                if (camera.ai) "$kind \u2014 AI analysis" else kind,
                 style = MaterialTheme.typography.titleSmall,
                 color = Color(0xFFF2F4F8),
             )
+            if (camera.ai) {
+                Text(
+                    "Tagged in OpenStreetMap as running AI analysis (camera:features). " +
+                        "Mappers' tag, not an official list; routing avoids it like " +
+                        "any other camera.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFB48CF2),
+                )
+            }
 
             val dir = camera.directionDeg
             Text(
@@ -1358,7 +1377,7 @@ private fun camerasGeoJson(cameras: List<Camera>): String {
     val features = cameras.joinToString(",") { c ->
         """{"type":"Feature","geometry":{"type":"Point",""" +
             """"coordinates":[${c.lon},${c.lat}]},""" +
-            """"properties":{"osm_id":${c.osmId}}}"""
+            """"properties":{"osm_id":${c.osmId},"ai":${c.ai}}}"""
     }
     return """{"type":"FeatureCollection","features":[$features]}"""
 }

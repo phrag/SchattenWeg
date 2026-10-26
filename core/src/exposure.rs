@@ -234,6 +234,7 @@ mod tests {
             direction_deg: None,
             half_fov_deg: 30.0,
             range_m: range,
+            ai: false,
         }
     }
 
