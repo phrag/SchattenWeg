@@ -33,6 +33,7 @@ the permission to reach the internet.
 - [How to use it](#how-to-use-it) — a quick walkthrough
 - [Your privacy](#your-privacy)
 - [Honesty about the limits](#honesty-about-the-limits)
+- [Where the AI-camera facts come from](#where-the-ai-camera-facts-come-from) — sources
 - [Build from source](#build-from-source) — for developers
 - [Contributing](#contributing)
 - [Report a problem](#report-a-problem)
@@ -103,11 +104,14 @@ Right now the data covers **Berlin only**.
   Alexanderplatz, Görlitzer Park and more) are drawn as violet dashed circles
   and treated as watched ground when routing. No official boundaries are
   published, so the circles are approximate. Long-press one for its status and
-  what it detects.
+  what it detects. Every fact on those cards is
+  [sourced below](#where-the-ai-camera-facts-come-from).
 - **Shows AI cameras mapped by OpenStreetMap contributors.** Volunteers have
   started mapping individual AI cameras: the police's AI cameras at
-  Kottbusser Tor are now in OpenStreetMap, along with the face-detection cameras
-  from the Südkreuz station pilot. The app draws them as **violet dots**, and
+  Kottbusser Tor are now in OpenStreetMap, along with the cameras tagged for
+  face detection at Südkreuz station (the federal police's face-recognition
+  trial there ran from August 2017 to July 2018; the tag records that trial,
+  not a current one). The app draws them as **violet dots**, and
   long-pressing one says it is tagged as AI. Routes avoid them like every other
   camera. As more get mapped, the nightly build picks them up.
 - **Finds places offline.** Search streets, neighbourhoods and stations from a
@@ -194,6 +198,39 @@ protect against — is in **[SECURITY.md](SECURITY.md)**.
   conspicuously weaves around every lens can itself draw attention.
 
 All of these are shown inside the app, on purpose.
+
+---
+
+## Where the AI-camera facts come from
+
+The AI-video zone cards and the AI-camera dots rest on public sources, not
+guesswork. Each claim below was last checked on **26 October 2026**. The zone
+table itself lives in [`core/src/zones.rs`](core/src/zones.rs); update it and
+this list together.
+
+| Claim | Status | Source |
+|-------|--------|--------|
+| Police AI video ("KI-gestützter Videoschutz") starts at Kottbusser Tor; configuration of the cameras began 24 Sep 2026, takes about four weeks, then a test phase follows | Confirmed | [Polizei Berlin press release No. 1252, 24 Sep 2026](https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1718008.php) |
+| Not issuing alerts yet: during configuration and testing the system detects and reports nothing, and is not yet running 24/7 | Confirmed | [Polizei Berlin FAQ on KI-gestützter Videoschutz](https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php) |
+| About 30 cameras at Kottbusser Tor | Confirmed (police figure via press) | [netzpolitik.org, 23 Aug 2026](https://netzpolitik.org/2026/verhaltensscanner-in-berlin-jetzt-beginnt-die-automatisierte-ueberwachung/), quoting Polizei Berlin; the police's own pages give no number |
+| All 30 are mapped in OpenStreetMap (`camera:features=artificial intelligence`, `operator=Polizei Berlin`) | Confirmed (counted in the OSM API) | [OpenStreetMap, Kottbusser Tor](https://www.openstreetmap.org/#map=19/52.4990/13.4178) |
+| Warschauer Brücke: planned by the end of 2026, no firm date | Confirmed | [Senate answer, Drucksache 19/26970, 6 Sep 2026](https://pardok.parlament-berlin.de/starweb/adis/citat/VT/19/SchrAnfr/S19-26970.pdf), answer to Q1 |
+| Alexanderplatz and Görlitzer Park: planned for 2027 | Confirmed | Drucksache 19/26970, answer to Q2; order Warschauer Brücke → Alexanderplatz → Görlitzer Park/Wrangelkiez in the press release |
+| Görlitzer Park: the busy entrances, the crossings between Reichenberger Kiez and Wrangelkiez, and the fence line, not the whole park | Confirmed (press, from the tender) | [taz, 9 Mar 2026](https://taz.de/KI-Videoueberwachung-in-Berlin/!6160851/) |
+| Detects violence (people hitting or kicking) and emergencies (people lying motionless) | Confirmed | Drucksache 19/26970, answer to Q6 |
+| Black screen until the software flags an event; an officer then decides | Confirmed | Press release No. 1252; Drucksache 19/26970, answer to Q6 |
+| Not facial recognition | Confirmed | Polizei Berlin FAQ: no real-time biometric remote identification, faces are not analysed, and the ASOG Bln does not allow it |
+| Signs at every entrance to a covered area | Confirmed (promised) | Drucksache 19/26970, answer to Q1b |
+| No boundaries or camera positions published | Confirmed | Neither the press release nor the FAQ gives them, and the Senate declined further technical detail on security grounds (Drucksache 19/26970, answer to Q1d) |
+| Building-protection pilots at the Rotes Rathaus, the Altes Stadthaus and the Jüdisches Museum: test phase Q2 2027, live trial Q3–Q4 2027 | Confirmed | Drucksache 19/26970, answer to Q4 |
+| What the building pilots detect: entering closed areas, crossing virtual lines, climbing fences or walls, vandalism and abandoned objects | Confirmed | Drucksache 19/26970, answer to Q6 |
+| Cameras at Südkreuz station tagged `camera:features=facedetection` | Confirmed, but historical | [OpenStreetMap](https://www.openstreetmap.org/node/5570745329) (6 nodes); the trial ran 1 Aug 2017 – 31 Jul 2018 ([Bundestag hib 792/2018](https://www.bundestag.de/presse/hib/-/575144)) |
+
+What the sources do **not** settle yet: whether the Kottbusser Tor test phase
+has started (four weeks after 24 September fell on about 22 October, and no
+update has been published), and taz's March report of mobile cameras outside
+the Abgeordnetenhaus, which the Senate's September answer does not list. The
+app leaves both out until a source confirms them.
 
 ---
 

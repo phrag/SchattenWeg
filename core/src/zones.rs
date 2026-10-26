@@ -8,8 +8,9 @@
 //! itself.
 //!
 //! **Geometry is crude on purpose.** The authorities publish names, not
-//! boundaries or camera positions (the Senate declined to release them:
-//! Drucksache 19/26970), so each zone is a circle around a landmark. The real
+//! boundaries or camera positions (the Senate declined further technical
+//! detail on security grounds: Drucksache 19/26970, answer to 1d), so each
+//! zone is a circle around a landmark. The real
 //! edge will be the signage promised at every entrance to a protected area;
 //! replace the circles with surveyed outlines once it exists.
 //!
@@ -18,14 +19,24 @@
 //! raises an edge's exposure by the share of the edge inside the circle, and
 //! the ordinary `length * (1 + λ * exposure)` weight does the rest.
 //!
-//! Sources: Berlin Abgeordnetenhaus Drucksache 19/26970 (Senate answer of
-//! 6 Sep 2026) and the Polizei Berlin press release of 24 Sep 2026.
+//! Sources (each claim, with its status and link, is listed in the README's
+//! "Where the AI-camera facts come from"; keep the two in step):
+//! - Berlin Abgeordnetenhaus Drucksache 19/26970, Senate answer of 6 Sep 2026:
+//!   dates, detections, signage, the building pilots.
+//!   <https://pardok.parlament-berlin.de/starweb/adis/citat/VT/19/SchrAnfr/S19-26970.pdf>
+//! - Polizei Berlin press release No. 1252 of 24 Sep 2026: start at
+//!   Kottbusser Tor, the four-week configuration, the order of the sites.
+//!   <https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1718008.php>
+//! - Polizei Berlin FAQ: no facial recognition, no alerts during set-up.
+//!   <https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php>
+//! - netzpolitik.org, 23 Aug 2026: about 30 cameras, quoting the police.
+//! - taz, 9 Mar 2026: which parts of Görlitzer Park are covered.
 
 /// Metres per degree of latitude (and of longitude at the equator).
 const M_PER_DEG_LAT: f64 = 111_320.0;
 
 /// When the table below was last checked against its sources.
-pub const AS_OF: &str = "October 2026";
+pub const AS_OF: &str = "26 October 2026";
 
 /// How far along a zone is. Both count for routing today.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -55,9 +66,10 @@ const POLICE_DETECTS: &str = "Violence (hitting, kicking) and people lying motio
 screen stays black until the software flags an event; an officer then decides.";
 
 const OBJEKTSCHUTZ_DETECTS: &str = "Entering restricted areas, crossing virtual lines, \
-climbing fences, vandalism and abandoned objects.";
+climbing fences or walls, vandalism (graffiti, thrown objects) and abandoned objects.";
 
-const BUILDING_NOTE: &str = "Building-protection pilot. Test phase planned for Q2 2027.";
+const BUILDING_NOTE: &str =
+    "Building-protection pilot. Test phase planned for Q2 2027, live trial Q3 to Q4 2027.";
 
 fn zone(
     id: &str,
