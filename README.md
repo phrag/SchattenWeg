@@ -10,21 +10,12 @@ the routing all live on your phone. Nothing you do — where you are, where you'
 going, the route you take — ever leaves the device. The app doesn't even hold
 the permission to reach the internet.
 
-<p align="center">
-  <a href="https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk"><b>⬇&nbsp;Download Stable</b></a>
-  (<a href="https://github.com/phrag/SchattenWeg/releases/latest">release notes</a>)
-  &nbsp;·&nbsp;
-  <a href="https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest.apk"><b>⬇&nbsp;Download Nightly</b></a>
-  (<a href="https://github.com/phrag/SchattenWeg/releases/tag/latest">build info</a>)
-  &nbsp;·&nbsp;
-  <a href="https://github.com/phrag/SchattenWeg/releases">all releases</a>
-</p>
-<p align="center">
-  <b>Stable</b> <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.built&label=built&color=2ea44f" alt="build date"> <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.cameras&label=cameras&color=2ea44f" alt="cameras bundled">
-  &nbsp;&nbsp;
-  <b>Nightly</b> <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.built&label=built&color=b48cf2" alt="build date"> <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.cameras&label=cameras&color=b48cf2" alt="cameras bundled">
-</p>
-<p align="center"><sub><b>Stable</b>: tested versions, recommended &middot; <b>Nightly</b>: rebuilt every night with the newest cameras from OpenStreetMap</sub></p>
+| Channel | Download | Version | Built | Cameras | Details |
+|---|---|---|---|---|---|
+| **Stable** (recommended) | **[⬇ schattenweg.apk](https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk)** | ![Stable version](https://img.shields.io/github/v/release/phrag/SchattenWeg?label=&color=2ea44f) | ![Stable build date](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.built&label=&color=2ea44f) | ![Cameras in Stable](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.cameras&label=&color=2ea44f) | [Release notes](https://github.com/phrag/SchattenWeg/releases/latest) |
+| **Nightly** | **[⬇ schattenweg-latest.apk](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest.apk)** | ![Nightly commit](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.commit&prefix=main%40&label=&color=b48cf2) | ![Nightly build date](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.built&label=&color=b48cf2) | ![Cameras in Nightly](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.cameras&label=&color=b48cf2) | [Build info](https://github.com/phrag/SchattenWeg/releases/tag/latest) |
+
+<sub><b>Stable</b>: tested versions, recommended &middot; <b>Nightly</b>: rebuilt every night with the newest cameras from OpenStreetMap &middot; <a href="https://github.com/phrag/SchattenWeg/releases">all releases</a> &middot; <a href="#download--install">how to install</a></sub>
 
 <p align="center">
   <img src="docs/screenshots/01-route.png" width="30%" alt="A walking route at High avoidance: 3356 m, 0% under watch, steering around clusters of mapped cameras">
@@ -54,21 +45,22 @@ the permission to reach the internet.
 There are two builds. Both are signed with the same release key, so you can
 switch between them and keep updating over the top.
 
-| | **Stable** (recommended) | **Nightly** |
-|---|---|---|
-| Download | **[schattenweg.apk](https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk)** | **[schattenweg-latest.apk](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest.apk)** |
-| What it is | A numbered version (e.g. 0.2.3), cut when features are finished | Whatever is on `main`, rebuilt **every night** |
-| Camera data | Fresh from OpenStreetMap on the day it was released | Fresh from OpenStreetMap **every day** |
-| Built / cameras | <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.built&label=built&color=2ea44f" alt="build date"> <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.cameras&label=cameras&color=2ea44f" alt="cameras bundled"> | <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.built&label=built&color=b48cf2" alt="build date"> <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.cameras&label=cameras&color=b48cf2" alt="cameras bundled"> |
-| Notes | [Release notes](https://github.com/phrag/SchattenWeg/releases/latest) | [Build info](https://github.com/phrag/SchattenWeg/releases/tag/latest): commit and OSM date |
+- **Stable** is a numbered version (e.g. 0.2.3), cut when features are
+  finished. Its camera data is fresh from OpenStreetMap on the day it was
+  released.
+- **Nightly** is whatever is on `main`, rebuilt **every night** with the
+  newest cameras from OpenStreetMap.
+
+The download links, versions, build dates and camera counts are in the
+[table at the top](#schattenweg).
 
 Pick **Stable** unless you want the newest cameras or features before the next
 release. The app's **About** section (☰) links to the Nightly download.
 
 **On your Android phone:**
 
-1. **Tap one of the download links above.** It is about 200 MB because the whole
-   Berlin map is inside, so use Wi-Fi. (The same file is under **Assets** on its
+1. **Tap one of the download links in the [table at the top](#schattenweg).**
+   It is about 200 MB because the whole Berlin map is inside, so use Wi-Fi. (The same file is under **Assets** on its
    release page.)
 2. When it has downloaded, tap **Open** (or open it from your **Downloads**).
    If your browser warns that the file "may be harmful", choose **Download
