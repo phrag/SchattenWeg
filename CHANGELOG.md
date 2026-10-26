@@ -4,6 +4,17 @@ Each `## <version>` section is used as the top of that release's notes by
 `.github/workflows/release.yml` (the tag `v0.2.2` picks up `## 0.2.2`).
 Add the section before pushing the tag.
 
+## 0.2.3
+
+- **AI cameras are marked on the map.** Cameras OpenStreetMap tags as running
+  AI analysis (`camera:features`) are drawn in violet, and their card says
+  so. This covers the 30 police AI cameras now mapped at Kottbusser Tor and the
+  face-detection cameras from the Südkreuz pilot. Routing avoids them exactly
+  like any other camera.
+- Camera directions written as German compass points (`O`, `NO`, `SO`) are now
+  understood, so those cameras are drawn as wedges instead of full circles.
+- Fresh OpenStreetMap camera data.
+
 ## 0.2.2
 
 - **Much smaller download: about 111 MB, down from 308 MB at 0.2.0.**
