@@ -1309,7 +1309,10 @@ private fun AiZoneInfoCard(zone: AiZone, onDismiss: () -> Unit) {
                 color = Color(0xFFC7D0DA),
             )
             Text(
-                "Not facial recognition, per the police. The circle is an " +
+                "Police say the AI does not analyse faces. Nobody independent can " +
+                    "check that: the software is secret, there is no public audit, " +
+                    "and updates can change it. The vendor advertises tracking " +
+                    "people across cameras and does not say how. The circle is an " +
                     "approximation: no boundary or camera positions are published. " +
                     "Routes treat it as watched ground. Checked ${aiZonesAsOf()}.",
                 style = MaterialTheme.typography.labelSmall,

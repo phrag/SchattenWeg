@@ -27,7 +27,8 @@
 //! - Polizei Berlin press release No. 1252 of 24 Sep 2026: start at
 //!   Kottbusser Tor, the four-week configuration, the order of the sites.
 //!   <https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1718008.php>
-//! - Polizei Berlin FAQ: no facial recognition, no alerts during set-up.
+//! - Polizei Berlin FAQ: police state faces are not analysed (unverified),
+//!   no alerts during set-up.
 //!   <https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php>
 //! - netzpolitik.org, 23 Aug 2026: about 30 cameras, quoting the police.
 //! - taz, 9 Mar 2026: which parts of Görlitzer Park are covered.

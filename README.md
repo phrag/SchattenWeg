@@ -229,7 +229,8 @@ this list together.
 | Görlitzer Park: the busy entrances, the crossings between Reichenberger Kiez and Wrangelkiez, and the fence line, not the whole park | Confirmed (press, from the tender) | [taz, 9 Mar 2026](https://taz.de/KI-Videoueberwachung-in-Berlin/!6160851/) |
 | Detects violence (people hitting or kicking) and emergencies (people lying motionless) | Confirmed | Drucksache 19/26970, answer to Q6 |
 | Black screen until the software flags an event; an officer then decides | Confirmed | Press release No. 1252; Drucksache 19/26970, answer to Q6 |
-| Not facial recognition | Confirmed | Polizei Berlin FAQ: no real-time biometric remote identification, faces are not analysed, and the ASOG Bln does not allow it |
+| Police say faces are not analysed and live biometric identification is not allowed under the ASOG Bln | Police claim, unverified | [Polizei Berlin FAQ](https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php). No independent audit is public, and the Senate declined technical detail (Drucksache 19/26970, answer 1d) |
+| The software vendor advertises "cross-camera, non-biometric tracking" of people; how people are matched between cameras is not stated | Vendor marketing, unverified | [Staige](https://staige.com/en) |
 | Signs at every entrance to a covered area | Confirmed (promised) | Drucksache 19/26970, answer to Q1b |
 | No boundaries or camera positions published | Confirmed | Neither the press release nor the FAQ gives them, and the Senate declined further technical detail on security grounds (Drucksache 19/26970, answer to Q1d) |
 | Building-protection pilots at the Rotes Rathaus, the Altes Stadthaus and the Jüdisches Museum: test phase Q2 2027, live trial Q3–Q4 2027 | Confirmed | Drucksache 19/26970, answer to Q4 |
