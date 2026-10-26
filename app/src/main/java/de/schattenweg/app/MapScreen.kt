@@ -109,6 +109,7 @@ import org.maplibre.android.geometry.LatLng as MlLatLng
 private enum class LayerGroup(val label: String, val ids: List<String>) {
     CAMERAS("Cameras", listOf("sw-camera-dots")),
     COVERAGE("Camera coverage", listOf("sw-camera-coverage-fill")),
+    AI_COVERAGE("AI camera coverage", listOf(AI_COVERAGE_FILL)),
     AI_ZONES("AI-monitored zones", listOf(AI_ZONE_FILL, AI_ZONE_LINE)),
     LABELS("Labels", listOf("label-street", "label-transit", "label-place")),
     BUILDINGS(
@@ -129,6 +130,10 @@ private const val TILT_3D_DEG = 50.0
 
 private const val CAMERA_SOURCE = "sw-cameras"
 private const val COVERAGE_SOURCE = "sw-camera-coverage"
+
+/** Coverage of the cameras tagged as running AI analysis: violet like their dots. */
+private const val AI_COVERAGE_SOURCE = "sw-ai-camera-coverage"
+private const val AI_COVERAGE_FILL = "sw-ai-camera-coverage-fill"
 
 /** Layer id, needed to hit-test taps against the camera dots. */
 private const val CAMERA_LAYER = "sw-camera-dots"
@@ -304,6 +309,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
                     style.addSource(GeoJsonSource(AI_ZONE_SOURCE, aiZonesGeoJson()))
                     style.addSource(GeoJsonSource(COVERAGE_SOURCE, EMPTY_COLLECTION))
+                    style.addSource(GeoJsonSource(AI_COVERAGE_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(ROUTE_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(CAMERA_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(ENDPOINT_SOURCE, EMPTY_COLLECTION))
@@ -344,6 +350,14 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                             .withProperties(
                                 PropertyFactory.fillColor("#e0575b"),
                                 PropertyFactory.fillOpacity(0.16f),
+                            )
+                            .also { it.minZoom = 14f },
+                    )
+                    style.addLayer(
+                        FillLayer(AI_COVERAGE_FILL, AI_COVERAGE_SOURCE)
+                            .withProperties(
+                                PropertyFactory.fillColor("#b48cf2"),
+                                PropertyFactory.fillOpacity(0.2f),
                             )
                             .also { it.minZoom = 14f },
                     )
@@ -406,7 +420,13 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             // Serialising a few thousand features is real work; a whole-city
             // viewport makes it large enough to drop frames on the main thread.
             val cameraJson = withContext(Dispatchers.Default) { camerasGeoJson(cameras) }
-            val coverageJson = withContext(Dispatchers.Default) { coverageGeoJson(coverage) }
+            // Same shapes, split by whether the camera is tagged as AI, so the
+            // two can be coloured and toggled apart.
+            val (coverageJson, aiCoverageJson) = withContext(Dispatchers.Default) {
+                val aiIds = cameras.filter { it.ai }.mapTo(HashSet()) { it.osmId }
+                val (ai, plain) = coverage.partition { it.osmId in aiIds }
+                coverageGeoJson(plain) to coverageGeoJson(ai)
+            }
             val routeJson = routeGeoJson(route?.polyline)
             val endpointJson = pointsGeoJson(listOfNotNull(start, end))
             mapView.getMapAsync { map ->
@@ -417,6 +437,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 }
                 val cameraSource = style.getSourceAs<GeoJsonSource>(CAMERA_SOURCE)
                 val coverageSource = style.getSourceAs<GeoJsonSource>(COVERAGE_SOURCE)
+                val aiCoverageSource = style.getSourceAs<GeoJsonSource>(AI_COVERAGE_SOURCE)
                 val routeSource = style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE)
                 val endpointSource = style.getSourceAs<GeoJsonSource>(ENDPOINT_SOURCE)
                 Log.d(
@@ -429,6 +450,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 )
                 cameraSource?.setGeoJson(cameraJson)
                 coverageSource?.setGeoJson(coverageJson)
+                aiCoverageSource?.setGeoJson(aiCoverageJson)
                 routeSource?.setGeoJson(routeJson)
                 endpointSource?.setGeoJson(endpointJson)
             }

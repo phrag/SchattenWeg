@@ -147,7 +147,7 @@ Once it's installed, there's nothing to set up — open it and go:
    much extra walking you'll accept to avoid a lens. *Low* keeps it short;
    *High* takes bigger detours to stay hidden. Change it and the route redraws.
 5. **Tidy the view.** The layers button (**☰**) lets you turn cameras, camera coverage,
-   AI-monitored zones, labels and buildings & landuse on or off, and holds the
+   AI camera coverage, AI-monitored zones, labels and buildings & landuse on or off, and holds the
    app's credits, version, licences and links. Hiding a layer doesn't change
    how routes are planned. **3D buildings** is on by default, so the map opens
    tilted with the buildings standing up (drag two fingers to tilt it yourself).
