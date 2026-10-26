@@ -203,7 +203,11 @@ camera covers it **or** it lies inside a police AI-video zone (below).
   (bearing ± half-FOV, within range).
 - `dome` / `panning` / unknown → **disc** (range only).
 - Default range/FOV live in `camera::defaults` — deliberately conservative
-  guesses; **tune against ground truth**, they are not from OSM.
+  guesses; **tune against ground truth**, they are not from OSM. Read them as
+  "face recognisable" distance, not how far a lens sees. `defaults::model_profile`
+  overrides them for models whose Axis datasheet we read (`camera:model`
+  containing `q3839` → 35 m / 180°, `q1809` → 60 m / 90°; a bearing makes them
+  wedges). Add models there; cache v9.
 
 **Buildings block the view — decided** (`core/src/occluders.rs`). A point is
 covered by a camera only if it is in range and in the cone **and** the sight

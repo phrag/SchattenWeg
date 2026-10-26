@@ -71,6 +71,15 @@ pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(&str, &str)]) 
     };
 
     let direction_deg = get("camera:direction").and_then(parse_direction);
+    let model = first_text(&[get("camera:model"), get("model")]);
+
+    // A known model's datasheet beats the generic per-type guess.
+    let profile = model.as_deref().and_then(defaults::model_profile);
+    let (range_m, half_fov_deg, kind) = match profile {
+        Some((range, half_fov, true)) => (range, half_fov, CameraKind::Fixed),
+        Some((range, half_fov, false)) => (range, half_fov, kind),
+        None => (defaults::range_m(kind), defaults::half_fov_deg(kind), kind),
+    };
 
     Some(Camera {
         osm_id,
@@ -78,11 +87,11 @@ pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(&str, &str)]) 
         lon,
         kind,
         direction_deg,
-        half_fov_deg: defaults::half_fov_deg(kind),
-        range_m: defaults::range_m(kind),
+        half_fov_deg,
+        range_m,
         ai: get("camera:features").is_some_and(has_ai_feature),
         manufacturer: first_text(&[get("manufacturer"), get("brand")]),
-        model: first_text(&[get("camera:model"), get("model")]),
+        model,
     })
 }
 
@@ -664,6 +673,35 @@ mod tests {
         let cam = camera_from_tags(42, 52.52, 13.40, &tags).unwrap();
         assert_eq!(cam.kind, CameraKind::Fixed);
         assert_eq!(cam.direction_deg, Some(90.0));
+    }
+
+    #[test]
+    fn known_axis_models_override_the_generic_defaults() {
+        let with = |model: &'static str, dir: Option<&'static str>| {
+            let mut tags = vec![
+                ("man_made", "surveillance"),
+                ("camera:type", "dome"),
+                ("camera:model", model),
+            ];
+            if let Some(d) = dir {
+                tags.push(("camera:direction", d));
+            }
+            camera_from_tags(1, 52.5, 13.4, &tags).unwrap()
+        };
+        let pano = with("AXIS Q3839-PVE Panoramic Camera", Some("90"));
+        assert_eq!((pano.range_m, pano.half_fov_deg), (35.0, 90.0));
+        assert_eq!(pano.kind, CameraKind::Fixed);
+        let bullet = with("AXIS Q1809-LE Bullet Camera", Some("0"));
+        assert_eq!((bullet.range_m, bullet.half_fov_deg), (60.0, 45.0));
+        // No bearing: still a disc, just of the model's range.
+        let blind = with("axis q3839-pve", None);
+        assert_eq!(blind.direction_deg, None);
+        assert!(blind.covers(52.5 + 0.0002, 13.4));
+        // Other models and untagged cameras keep the defaults.
+        let other = with("Some Other Cam", Some("0"));
+        assert_eq!((other.range_m, other.half_fov_deg), (20.0, 30.0));
+        let plain = camera_from_tags(1, 0.0, 0.0, &[("man_made", "surveillance")]).unwrap();
+        assert_eq!((plain.range_m, plain.half_fov_deg), (20.0, 30.0));
     }
 
     #[test]

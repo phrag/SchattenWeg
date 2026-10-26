@@ -6,6 +6,7 @@ Add the section before pushing the tag.
 
 ## 0.2.3
 
+- **Camera range is now labelled as an assumption, and two Axis models use their datasheets.** The card says the range is roughly face-recognition distance. Cameras tagged AXIS Q3839-PVE (180° panorama, 35 m) or Q1809-LE (90°, 60 m) use those figures instead of the generic 20–30 m and 60° cone; this changes routes around Kottbusser Tor.
 - **AI cameras are marked on the map.** Cameras OpenStreetMap tags as running
   AI analysis (`camera:features`) are drawn in violet, and their card says
   so. This covers the 30 police AI cameras now mapped at Kottbusser Tor and the

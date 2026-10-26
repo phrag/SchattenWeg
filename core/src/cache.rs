@@ -49,7 +49,7 @@ const MAGIC: &[u8; 4] = b"SWGC";
 /// points (`O`, `NO`, `SO`) parse as `camera:direction`, which turns some
 /// discs into cones.
 /// 8: each camera carries optional `manufacturer` and `model` strings.
-const VERSION: u32 = 8;
+const VERSION: u32 = 9;
 
 /// The five flat vectors a `Router` is assembled from. This is exactly what the
 /// PBF ingest produces (with edges already scored) and exactly what the cache
