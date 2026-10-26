@@ -34,6 +34,14 @@ Our ingest paths (see `scripts/` and `core/src/osm.rs`):
 
 - **Live/dev:** Overpass API, `node["man_made"="surveillance"]` in a Berlin bbox
   (`scripts/fetch_cameras.sh`, GeoJSON preview only).
+- **Nightly/main/manual builds pull cameras live** (`LIVE_CAMERAS=1` in
+  `build_map_assets.sh`, set by `release.yml` for everything but tags): one
+  Overpass query for Berlin's surveillance nodes is swapped into the routing
+  extract (roads and buildings stay from Geofabrik). Failure or an implausible
+  count (< half the extract's) falls back to the extract's cameras, so the
+  build never breaks. `build-info.txt/json` report the real camera timestamp
+  (`osm_snapshot`, `camera_data`), `camera_source` and `extract_snapshot`.
+  Tagged (Stable) builds keep the extract's cameras.
 - **Shipped/offline:** Geofabrik `berlin-latest.osm.pbf`, filtered with `osmium`
   to streets + surveillance nodes (`scripts/build_map_assets.sh`), read
   on-device by the Rust core and bundled in the APK.
@@ -369,8 +377,9 @@ Track progress against this list when picking the project back up:
       `schattenweg-<variant>.apk` (`base.archivesName`), not `app-<variant>.apk`.
       Tags and `main` pushes are signed with the release key from repo secrets
       (see SECURITY.md); other refs are debug-signed. A scheduled run (**nightly**,
-      02:17 UTC) rebuilds the rolling `latest` from `main` the same way, so its
-      cameras are at most a day behind OSM even when nobody pushes; GitHub
+      05:07 UTC, after Geofabrik's daily extract, which was seen published at
+      03:27 UTC on one day only) rebuilds the rolling `latest` from `main` the
+      same way, with live cameras, even when nobody pushes; GitHub
       pauses scheduled runs after 60 days of repo inactivity. The README calls
       this rolling build **Nightly** and the tagged ones **Stable**; the tag
       stays `latest` because the links depend on it. The rolling asset is

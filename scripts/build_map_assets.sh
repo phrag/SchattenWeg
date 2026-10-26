@@ -30,6 +30,16 @@
 #   RETRIES=<n>             download attempts per file (default 5)
 #   REFRESH=1               discard any cached extract and fetch the CURRENT one,
 #                           so the bundled snapshot always has the latest cameras
+#   LIVE_CAMERAS=1          pull the surveillance nodes live from OpenStreetMap
+#                           (Overpass) and swap them into the routing snapshot,
+#                           so the cameras are minutes old instead of as old as
+#                           the daily extract. Roads and buildings still come
+#                           from the extract. One query per run; if Overpass
+#                           fails or looks wrong the extract's own cameras are
+#                           kept and the build carries on. Off by default; the
+#                           nightly/main/manual release builds turn it on, tagged
+#                           (Stable) releases do not.
+#   OVERPASS_URL=<url>      use a different Overpass endpoint
 #
 # Camera freshness: cameras are OSM nodes carried inside the extract, so "latest
 # cameras" just means "latest extract". A clean checkout has no cached extract
@@ -50,6 +60,11 @@ GEOFABRIK="${EXTRACT_URL:-https://download.geofabrik.de/europe/germany/berlin-la
 RAW="$DATA/berlin-latest.osm.pbf"
 ROUTING="$DATA/berlin-routing.osm.pbf"
 TILES="$DATA/berlin.pmtiles"
+
+OVERPASS_URL="${OVERPASS_URL:-https://overpass-api.de/api/interpreter}"
+# Overpass asks API users to identify themselves; this tells its operators who
+# to contact and lets them rate-limit us specifically rather than everybody.
+USER_AGENT="schattenweg-build/1.0 (+https://github.com/phrag/SchattenWeg; one query per build)"
 
 PLANETILER_VERSION="${PLANETILER_VERSION:-v0.10.2}"
 PLANETILER_JAR="$DATA/planetiler-$PLANETILER_VERSION.jar"
@@ -313,6 +328,103 @@ osmium tags-filter --overwrite "$RAW" \
 osmium fileinfo -e "$ROUTING" | sed -n 's/^  Number of/  /p' || true
 echo "-> $ROUTING"
 
+# --- 2a. Live cameras (optional) ---------------------------------------------
+# The Geofabrik extract is cut once a day, so its cameras can be a day old. With
+# LIVE_CAMERAS=1 the surveillance nodes are taken from Overpass instead and
+# swapped into the routing snapshot: roads and buildings stay from the extract.
+# This must never break a build, so every failure path below falls back to the
+# extract's own cameras and says so.
+camera_source="geofabrik"
+camera_snapshot=""
+
+# Count <node> elements of an Overpass XML file (Overpass writes one per line).
+count_xml_nodes() { grep -c '^[[:space:]]*<node ' "$1" || true; }
+
+# Fetch Berlin's surveillance nodes into $1 (OSM XML). One query, retried with
+# exponential backoff on failure/overload; prints the data timestamp (Overpass'
+# osm_base, i.e. how fresh its database is) to stdout on success.
+fetch_live_cameras() {
+    local out="$1" attempt=1 delay=10 code rc base
+    local query='[out:xml][timeout:180];
+area["boundary"="administrative"]["admin_level"="4"]["name"="Berlin"]->.b;
+node["man_made"="surveillance"](area.b);
+out meta;'
+    while (( attempt <= 4 )); do
+        rc=0
+        code=$(curl -sS --max-time 240 --connect-timeout 20 \
+            -A "$USER_AGENT" --data-urlencode "data=$query" \
+            -w '%{http_code}' -o "$out" "$OVERPASS_URL") || rc=$?
+        # A 200 can still carry a runtime error (timeout, out of memory) as a
+        # <remark>; a truncated body lacks the closing tag.
+        if (( rc == 0 )) && [[ "$code" == "200" ]] \
+            && grep -q '</osm>' "$out" \
+            && ! grep -qi '<remark>.*error' "$out"; then
+            base="$(sed -nE 's/.*<meta osm_base="([^"]+)".*/\1/p' "$out" | head -1)"
+            if [[ -n "$base" ]]; then
+                echo "$base"
+                return 0
+            fi
+            echo "  Overpass answered without a data timestamp" >&2
+        else
+            echo "  Overpass attempt $attempt failed (curl $rc, HTTP ${code:-none})" >&2
+        fi
+        if (( attempt < 4 )); then
+            echo "  retrying in ${delay}s" >&2
+            sleep "$delay"
+            delay=$((delay * 3))
+        fi
+        attempt=$((attempt + 1))
+    done
+    return 1
+}
+
+if [[ "${LIVE_CAMERAS:-0}" == "1" ]]; then
+    echo "LIVE_CAMERAS=1 -- fetching current cameras from Overpass (one query)..."
+    mkdir -p "$DATA/tmp"
+    live_xml="$DATA/tmp/live-cameras.osm"
+    live_pbf="$DATA/tmp/live-cameras.osm.pbf"
+    nocam_pbf="$DATA/tmp/routing-nocam.osm.pbf"
+    merged_pbf="$DATA/tmp/routing-merged.osm.pbf"
+    rm -f "$live_xml" "$live_pbf" "$nocam_pbf" "$merged_pbf"
+
+    extract_cams=""
+    if osmium tags-filter --overwrite "$ROUTING" n/man_made=surveillance \
+        -o "$DATA/tmp/extract-cams.osm.pbf" 2>/dev/null; then
+        extract_cams="$(osmium fileinfo -e -g data.count.nodes \
+            "$DATA/tmp/extract-cams.osm.pbf" 2>/dev/null | head -1 || true)"
+    fi
+    rm -f "$DATA/tmp/extract-cams.osm.pbf"
+
+    if live_ts="$(fetch_live_cameras "$live_xml")"; then
+        live_cams="$(count_xml_nodes "$live_xml")"
+        echo "  Overpass returned $live_cams surveillance nodes (data as of $live_ts);" \
+            "the extract has ${extract_cams:-unknown}"
+        # Sanity floor: Berlin has thousands of cameras and they don't vanish
+        # overnight. A tiny answer means a broken response, not a real edit.
+        floor=1
+        [[ "$extract_cams" =~ ^[0-9]+$ ]] && floor=$(( extract_cams / 2 ))
+        if (( live_cams < floor || live_cams == 0 )); then
+            echo "WARNING: live camera count $live_cams is under half the extract's" \
+                "(${extract_cams:-?}); distrusting it, keeping the extract's cameras"
+        elif osmium tags-filter --overwrite --invert-match "$ROUTING" \
+                n/man_made=surveillance -o "$nocam_pbf" \
+            && osmium sort --overwrite "$live_xml" -o "$live_pbf" \
+            && osmium merge --overwrite "$nocam_pbf" "$live_pbf" -o "$merged_pbf" \
+            && [[ -s "$merged_pbf" ]]; then
+            mv "$merged_pbf" "$ROUTING"
+            camera_source="overpass"
+            camera_snapshot="$live_ts"
+            echo "-> swapped $live_cams live cameras into $ROUTING"
+        else
+            echo "WARNING: could not merge the live cameras; keeping the extract's"
+        fi
+    else
+        echo "WARNING: Overpass unavailable after retries; the build uses the" \
+            "extract's own cameras (as old as the extract)"
+    fi
+    rm -f "$live_xml" "$live_pbf" "$nocam_pbf" "$merged_pbf"
+fi
+
 # Pre-build the scored-graph cache with the same core code the app runs. It IS
 # the app's routing data: the cameras, places, street graph (already scored) and
 # the building outlines near cameras are all in it, so the app opens it without
@@ -352,15 +464,19 @@ fi
 # Provenance: record what this snapshot actually contains so a build can state
 # how current its cameras are. The OSM snapshot date is the extract's own
 # replication timestamp (when Geofabrik cut it, not when we downloaded it); the
-# camera count is the surveillance nodes in the snapshot. Both are best-effort
+# camera count is the surveillance nodes in the snapshot. With LIVE_CAMERAS the
+# snapshot date is Overpass' data timestamp and the extract date is kept apart. Both are best-effort
 # -- a failure here must not fail the build -- and are written to build-info.txt
 # for the release workflow to fold into its notes.
 BUILD_INFO="$DATA/build-info.txt"
 # `|| true` on each substitution because the script runs under `set -e`: a
 # failed osmium probe here must degrade to "unknown", never abort the build.
-osm_snapshot="$(osmium fileinfo -e -g header.option.osmosis_replication_timestamp \
+extract_snapshot="$(osmium fileinfo -e -g header.option.osmosis_replication_timestamp \
     "$RAW" 2>/dev/null | head -1 || true)"
-[[ -z "$osm_snapshot" ]] && osm_snapshot="unknown"
+[[ -z "$extract_snapshot" ]] && extract_snapshot="unknown"
+# The camera data's own timestamp: Overpass' when the cameras were pulled live,
+# the extract's otherwise. This is what the app and the release notes report.
+osm_snapshot="${camera_snapshot:-$extract_snapshot}"
 cam_probe="$DATA/tmp/cameras-probe.osm.pbf"
 mkdir -p "$DATA/tmp"
 cameras=""
@@ -373,6 +489,8 @@ fi
 {
     echo "built_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "osm_snapshot=$osm_snapshot"
+    echo "camera_source=$camera_source"
+    echo "extract_snapshot=$extract_snapshot"
     echo "surveillance_nodes=$cameras"
     echo "cameras=${routed_cameras:-unknown}"
     echo "extract_source=$GEOFABRIK"
@@ -380,7 +498,7 @@ fi
 # The app shows how fresh its data is (About panel), so the two dates travel
 # inside the APK too. Dates only: nothing else from build-info.txt is shipped.
 grep -E '^(osm_snapshot|built_utc)=' "$BUILD_INFO" > "$ASSETS/data-info.txt"
-echo "   cameras: ${routed_cameras:-unknown} routed ($cameras surveillance nodes)  |  OSM snapshot: $osm_snapshot"
+echo "   cameras: ${routed_cameras:-unknown} routed ($cameras surveillance nodes)  |  camera data: $osm_snapshot ($camera_source)  |  extract: $extract_snapshot"
 echo "   provenance written to $BUILD_INFO"
 
 # --- 3. Label glyphs ---------------------------------------------------------
