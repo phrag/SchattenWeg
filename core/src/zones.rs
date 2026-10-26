@@ -91,8 +91,9 @@ pub fn table() -> Vec<AiZone> {
             (52.4990, 13.4178),
             150.0,
             Commissioning,
-            "About 30 cameras. Set-up and calibration began 24 Sep 2026, roughly four \
-weeks, then a test phase. Not yet issuing alerts.",
+            "About 30 cameras, all 30 now mapped in OpenStreetMap (purple dots). \
+Set-up and calibration began 24 Sep 2026, roughly four weeks, then a test phase. \
+Not yet issuing alerts.",
             POLICE_DETECTS,
         ),
         zone(

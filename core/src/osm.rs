@@ -43,6 +43,8 @@ impl From<osmpbf::Error> for OsmError {
 ///     dropped: they watch the inside of a building (a lobby, a museum), not
 ///     the street, and modelling them as a disc would hide walls' worth of
 ///     street behind them.
+///   * `camera:features=artificial intelligence|facedetection|…` — sets
+///     [`Camera::ai`] (see [`has_ai_feature`]); display only.
 pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(&str, &str)]) -> Option<Camera> {
     let get = |k: &str| tags.iter().find(|(tk, _)| *tk == k).map(|&(_, v)| v);
 
@@ -76,20 +78,41 @@ pub fn camera_from_tags(osm_id: i64, lat: f64, lon: f64, tags: &[(&str, &str)]) 
         direction_deg,
         half_fov_deg: defaults::half_fov_deg(kind),
         range_m: defaults::range_m(kind),
+        ai: get("camera:features").is_some_and(has_ai_feature),
+    })
+}
+
+/// Does a `camera:features` value (a `;`-separated list) name some kind of
+/// automated analysis? Berlin's police AI cameras at Kottbusser Tor are tagged
+/// `artificial intelligence`; the Südkreuz face-recognition pilot cameras
+/// `facedetection`. The other spellings are what mappers use elsewhere.
+pub fn has_ai_feature(v: &str) -> bool {
+    v.split(';').any(|f| {
+        matches!(
+            f.trim().to_lowercase().replace(['_', '-'], " ").as_str(),
+            "artificial intelligence"
+                | "ai"
+                | "facedetection"
+                | "face detection"
+                | "face recognition"
+                | "facial recognition"
+                | "behaviour detection"
+                | "behavior detection"
+        )
     })
 }
 
 /// OSM `camera:direction` is usually a number, but can be a compass point
-/// ("N", "SW", …). Handle both.
+/// ("N", "SW", …), sometimes in German ("O" for Ost). Handle all of them.
 fn parse_direction(v: &str) -> Option<f64> {
     if let Ok(deg) = v.trim().parse::<f64>() {
         return Some(((deg % 360.0) + 360.0) % 360.0);
     }
     let deg = match v.trim().to_uppercase().as_str() {
         "N" => 0.0,
-        "NE" => 45.0,
-        "E" => 90.0,
-        "SE" => 135.0,
+        "NE" | "NO" => 45.0,
+        "E" | "O" => 90.0,
+        "SE" | "SO" => 135.0,
         "S" => 180.0,
         "SW" => 225.0,
         "W" => 270.0,
@@ -656,6 +679,37 @@ mod tests {
     }
 
     #[test]
+    fn german_compass_points() {
+        let dir = |d: &'static str| {
+            let tags = [("man_made", "surveillance"), ("camera:direction", d)];
+            camera_from_tags(1, 0.0, 0.0, &tags).unwrap().direction_deg
+        };
+        assert_eq!(dir("O"), Some(90.0));
+        assert_eq!(dir("NO"), Some(45.0));
+        assert_eq!(dir("SO"), Some(135.0));
+    }
+
+    #[test]
+    fn camera_features_mark_ai_cameras() {
+        let ai = |features: Option<&'static str>| {
+            let mut tags = vec![
+                ("man_made", "surveillance"),
+                ("surveillance:type", "camera"),
+            ];
+            if let Some(f) = features {
+                tags.push(("camera:features", f));
+            }
+            camera_from_tags(1, 0.0, 0.0, &tags).unwrap().ai
+        };
+        // As tagged at Kottbusser Tor and Südkreuz.
+        assert!(ai(Some("artificial intelligence")));
+        assert!(ai(Some("facedetection")));
+        assert!(ai(Some("night_vision;Face_Recognition")));
+        assert!(!ai(Some("night_vision")));
+        assert!(!ai(None));
+    }
+
+    #[test]
     fn footways_walkable_motorways_not() {
         assert!(foot_accessible(&[("highway", "footway")]));
         assert!(foot_accessible(&[("highway", "residential")]));
@@ -779,6 +833,7 @@ mod tests {
             direction_deg: None,
             half_fov_deg: 30.0,
             range_m: 20.0,
+            ai: false,
         }
     }
 

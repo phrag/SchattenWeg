@@ -51,6 +51,10 @@ pub struct Camera {
     pub half_fov_deg: f64,
     /// Assumed effective range in metres.
     pub range_m: f64,
+    /// Tagged in OSM as running AI analysis (`camera:features`, see
+    /// `osm::has_ai_feature`). Display only: coverage and scoring are the
+    /// same as for any other camera.
+    pub ai: bool,
 }
 
 impl Camera {
@@ -150,6 +154,7 @@ mod tests {
             direction_deg: Some(dir),
             half_fov_deg: 30.0,
             range_m: 50.0,
+            ai: false,
         }
     }
 

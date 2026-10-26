@@ -44,7 +44,10 @@ const MAGIC: &[u8; 4] = b"SWGC";
 /// 6: the header holds the source fingerprint and the zone-table signature as
 /// two fields (it used to hold their XOR), so a cache can be checked against
 /// the zone table without the extract it was built from.
-const VERSION: u32 = 6;
+/// 7: each camera carries an `ai` flag (`camera:features`), and German compass
+/// points (`O`, `NO`, `SO`) parse as `camera:direction`, which turns some
+/// discs into cones.
+const VERSION: u32 = 7;
 
 /// The five flat vectors a `Router` is assembled from. This is exactly what the
 /// PBF ingest produces (with edges already scored) and exactly what the cache
@@ -98,6 +101,7 @@ pub fn write<W: Write>(w: &mut W, parts: &Parts, source: u64, zones: u64) -> io:
         }
         write_f64(w, c.half_fov_deg)?;
         write_f64(w, c.range_m)?;
+        w.write_all(&[u8::from(c.ai)])?;
     }
 
     write_u64(w, parts.places.len() as u64)?;
@@ -191,6 +195,11 @@ fn read_checked<R: Read>(r: &mut R, source: Option<u64>, zones: u64) -> io::Resu
         };
         let half_fov_deg = read_f64(r)?;
         let range_m = read_f64(r)?;
+        let ai = match read_u8(r)? {
+            0 => false,
+            1 => true,
+            _ => return Err(bad("invalid camera ai flag")),
+        };
         cameras.push(Camera {
             osm_id,
             lat,
@@ -199,6 +208,7 @@ fn read_checked<R: Read>(r: &mut R, source: Option<u64>, zones: u64) -> io::Resu
             direction_deg,
             half_fov_deg,
             range_m,
+            ai,
         });
     }
 
@@ -387,6 +397,7 @@ mod tests {
                     direction_deg: Some(90.0),
                     half_fov_deg: 30.0,
                     range_m: 25.0,
+                    ai: true,
                 },
                 Camera {
                     osm_id: 9,
@@ -396,6 +407,7 @@ mod tests {
                     direction_deg: None,
                     half_fov_deg: 0.0,
                     range_m: 15.0,
+                    ai: false,
                 },
             ],
             places: vec![Place {
@@ -434,6 +446,7 @@ mod tests {
             assert_eq!(a.direction_deg, b.direction_deg);
             assert_eq!(a.half_fov_deg, b.half_fov_deg);
             assert_eq!(a.range_m, b.range_m);
+            assert_eq!(a.ai, b.ai);
         }
         assert_eq!(back.places.len(), parts.places.len());
         for (a, b) in back.places.iter().zip(&parts.places) {
