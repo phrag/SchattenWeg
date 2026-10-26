@@ -261,6 +261,31 @@ mod tests {
     }
 
     #[test]
+    fn known_sites_are_present_with_expected_status() {
+        let zones = table();
+        let get = |id: &str| {
+            zones
+                .iter()
+                .find(|z| z.id == id)
+                .unwrap_or_else(|| panic!("{id}"))
+        };
+        // Kottbusser Tor is the one site already being commissioned.
+        let kotti = get("kotti");
+        assert_eq!(kotti.status, ZoneStatus::Commissioning);
+        assert!(haversine_m(kotti.lat, kotti.lon, 52.4990, 13.4178) < 1.0);
+        for id in ["warschauer", "alex", "goerli"] {
+            assert_eq!(get(id).status, ZoneStatus::Planned, "{id}");
+        }
+        // Every site ships with the "who decides" caveat in its card text.
+        for z in &zones {
+            assert!(!z.detects.trim().is_empty(), "{}", z.id);
+            assert_eq!(z.name, z.name.trim(), "{}", z.id);
+            assert_eq!(z.note, z.note.trim(), "{}", z.id);
+        }
+        assert!(get("kotti").detects.contains("officer"));
+    }
+
+    #[test]
     fn contains_agrees_with_haversine_away_from_the_edge() {
         let zones = table();
         let idx = ZoneIndex::new(&zones);

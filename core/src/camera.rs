@@ -178,6 +178,30 @@ pub mod defaults {
 mod tests {
     use super::*;
 
+    #[test]
+    fn model_profile_pins_the_axis_datasheet_values() {
+        // Axis DORI figures read in `defaults::model_profile`; a change here
+        // moves every affected camera's coverage, so it must be deliberate
+        // (and needs a `cache::VERSION` bump).
+        assert_eq!(
+            defaults::model_profile("AXIS Q3839-PVE"),
+            Some((35.0, 90.0, true))
+        );
+        assert_eq!(
+            defaults::model_profile("AXIS Q1809-LE"),
+            Some((60.0, 45.0, true))
+        );
+        // Case-insensitive, and matched anywhere in the free text.
+        assert_eq!(
+            defaults::model_profile("axis q3839-pve panoramic"),
+            Some((35.0, 90.0, true))
+        );
+        assert_eq!(defaults::model_profile("Q1809"), Some((60.0, 45.0, true)));
+        for other in ["", "P3245", "Q1805", "Q383"] {
+            assert_eq!(defaults::model_profile(other), None, "{other:?}");
+        }
+    }
+
     fn fixed_facing(dir: f64) -> Camera {
         Camera {
             osm_id: 1,

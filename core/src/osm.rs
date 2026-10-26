@@ -733,6 +733,45 @@ mod tests {
     }
 
     #[test]
+    fn parse_direction_normalises_and_rejects() {
+        assert_eq!(parse_direction("90"), Some(90.0));
+        assert_eq!(parse_direction(" 45.5 "), Some(45.5));
+        assert_eq!(parse_direction("360"), Some(0.0));
+        assert_eq!(parse_direction("-90"), Some(270.0));
+        assert_eq!(parse_direction("450"), Some(90.0));
+        assert_eq!(parse_direction("n"), Some(0.0));
+        assert_eq!(parse_direction(" w "), Some(270.0));
+        assert_eq!(parse_direction("NW"), Some(315.0));
+        assert_eq!(parse_direction("E"), Some(90.0));
+        assert_eq!(parse_direction("S"), Some(180.0));
+        assert_eq!(parse_direction(""), None);
+        assert_eq!(parse_direction("up"), None);
+        assert_eq!(parse_direction("NNE"), None);
+    }
+
+    #[test]
+    fn has_ai_feature_spellings() {
+        for yes in [
+            "artificial intelligence",
+            "Artificial_Intelligence",
+            "ai",
+            "AI",
+            "facedetection",
+            "face-detection",
+            "face_recognition",
+            "facial recognition",
+            "behaviour detection",
+            "behavior_detection",
+            " night_vision ; ai ",
+        ] {
+            assert!(has_ai_feature(yes), "{yes:?}");
+        }
+        for no in ["", "night_vision", "zoom;infrared", "air", "maintenance"] {
+            assert!(!has_ai_feature(no), "{no:?}");
+        }
+    }
+
+    #[test]
     fn compass_point_direction() {
         let tags = [("man_made", "surveillance"), ("camera:direction", "SW")];
         let cam = camera_from_tags(1, 0.0, 0.0, &tags).unwrap();
