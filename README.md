@@ -197,6 +197,13 @@ protect against — is in **[SECURITY.md](SECURITY.md)**.
   are only planned, and routes treat all of them as watched. The violet AI
   camera dots are what OSM contributors have mapped and tagged, not an
   official list.
+- Each camera's **range and field of view are assumptions**, not OSM data or
+  measurements. By default a camera covers 20–30 m (by type) and a fixed one
+  with a mapped direction a 60° cone; read that as roughly how far a face could
+  be recognised, not how far the camera can see. A camera with no mapped
+  direction is treated as covering all round. For two models, the AXIS
+  Q3839-PVE (180° panorama, 35 m) and Q1809-LE (90°, 60 m), the figures are
+  taken from Axis's published datasheets and are still estimates.
 - Avoiding mapped cameras **reduces exposure; it is not anonymity.** A route that
   conspicuously weaves around every lens can itself draw attention.
 

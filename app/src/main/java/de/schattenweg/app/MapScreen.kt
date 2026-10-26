@@ -1259,7 +1259,9 @@ private fun CameraInfoCard(camera: Camera, onDismiss: () -> Unit) {
             )
             Text(
                 "Range and field of view are this app's assumptions, not OSM " +
-                    "data. OSM node ${camera.osmId}.",
+                    "data: roughly how far a face could be recognised, and " +
+                    "from the maker's datasheet where the model is known. " +
+                    "OSM node ${camera.osmId}.",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xFF9AA4B2),
             )

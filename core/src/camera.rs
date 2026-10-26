@@ -114,7 +114,10 @@ fn angular_within(bearing: f64, center: f64, half_fov: f64) -> bool {
 }
 
 /// Default modelling parameters keyed off the OSM tag classes. These are
-/// deliberately conservative starting points — tune against ground truth.
+/// assumptions, not OSM data or measurements: read them as the distance at
+/// which a face could plausibly be recognised, not how far a camera can see
+/// (a datasheet's "detect" distance is several times longer). Tune against
+/// ground truth.
 pub mod defaults {
     use super::CameraKind;
 
@@ -131,6 +134,32 @@ pub mod defaults {
     /// Half field-of-view in degrees for directional cameras.
     pub fn half_fov_deg(_kind: CameraKind) -> f64 {
         30.0 // i.e. a 60° cone
+    }
+
+    /// Range and field of view for camera models whose datasheet we have read,
+    /// matched on the OSM `camera:model` text (case-insensitive). Returns
+    /// `(range_m, half_fov_deg, directional)`; `directional` means the model
+    /// is a fixed mount, so a mapped bearing makes it a wedge whatever
+    /// `camera:type` says. Applied only where the tag is present.
+    ///
+    /// Both rows come from Axis's published DORI tables (pixel-density
+    /// distances under EN 62676-4, centre of image; Axis says to "use
+    /// margins"), read as the "recognise" distance like the generic defaults:
+    ///   * AXIS Q3839-PVE: four sensors, 180° x 90°. Recognise 17.7 m, observe
+    ///     35 m. 35 m is the observe figure: the 8K image is spread so wide
+    ///     that recognising a face is only possible close in.
+    ///   * AXIS Q1809-LE (24 mm zoom lens, 90°–44° wide): recognise 42 m at
+    ///     the wide end, 81 m at the tele end. 60 m sits between them, with
+    ///     the widest (90°) angle, as a zoom setting is not mapped.
+    pub fn model_profile(model: &str) -> Option<(f64, f64, bool)> {
+        let m = model.to_ascii_lowercase();
+        if m.contains("q3839") {
+            Some((35.0, 90.0, true))
+        } else if m.contains("q1809") {
+            Some((60.0, 45.0, true))
+        } else {
+            None
+        }
     }
 
     /// A building only blocks a camera's view if it is at least this tall, in
