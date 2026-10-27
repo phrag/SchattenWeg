@@ -15,9 +15,9 @@ does about that, and what it deliberately does not promise.
 | A backend operator (including us) | There is no backend. Routing, scoring and map rendering are entirely on-device. We never learn a start, a destination, or that you opened the app. |
 | Tile provider correlating viewports | Basemap tiles are bundled offline; no tile server sees where you pan. |
 | Google / Play Services telemetry | No Play Services, no Firebase, no analytics, no crash reporter. The MapLibre AAR was audited: it contains no telemetry or analytics classes. |
-| Another app on the device | No exported components except the launcher activity. No content providers, no exported services or receivers. Map data lives in app-private `filesDir`. |
+| Another app on the device | The only exported activity is the launcher. The APK also carries two AndroidX components: `InitializationProvider` (not exported) and `ProfileInstallReceiver` (exported, but only the system shell holding the `DUMP` permission can trigger it). No other providers, services or receivers. Map data lives in app-private `filesDir`. |
 | Someone with the unlocked device | Out of scope — see below. |
-| Someone extracting an ADB backup | `android:allowBackup="false"`; the app's data is excluded from backup and from `adb backup`. |
+| Someone extracting a cloud or ADB backup | `android:allowBackup="false"`; the app's data is excluded from cloud backup and from `adb backup`. (On Android 12+ this flag does not govern device-to-device transfer, which is controlled by `dataExtractionRules`; the app does not set them.) |
 | A tampered or forged build | Release builds are signed with a key that never touches this repo; unsigned is the failure mode if the key is absent (see below). |
 
 **What we explicitly do NOT defend against**
@@ -95,11 +95,18 @@ any pushed key as burned.
   and both say so loudly when used: `SKIP_CHECKSUM=1`, and `EXTRACT_URL=<url>`
   (a mirror has no Geofabrik checksum to compare against — verify such a
   source yourself).
-- The Planetiler JAR is downloaded from its GitHub release without checksum
-  verification — a known gap. Pin and verify it if your threat model includes
-  a compromised release asset.
-- The map data pipeline is the only network step in the project, and it runs
-  on a build machine — never on the phone.
+- The Planetiler JAR is checked against the `.sha256` file published beside it
+  in the same GitHub release. That catches a corrupted download or a poisoned
+  cache, but not a compromised release, since the hash comes from the same
+  place. Pin the hash in the script if your threat model includes that.
+- Nightly and `main` builds also pull the camera nodes live from Overpass
+  (`LIVE_CAMERAS=1`). That data has no integrity check beyond a plausibility
+  test (fewer than half the extract's cameras falls back to the extract).
+  Tagged (Stable) builds keep the extract's cameras.
+- The map data pipeline (Geofabrik, Overpass, the Planetiler download) is the
+  only part of the project that talks to data hosts, and it runs on a build
+  machine — never on the phone. Dependency resolution (Gradle, Cargo) also
+  needs the network at build time.
 - Maintainers with network access to Gradle's CDN should add
   `distributionSha256Sum` to `gradle/wrapper/gradle-wrapper.properties`
   (published at `<distributionUrl>.sha256`).
@@ -114,4 +121,6 @@ scaffolding.
 ## Reporting
 
 Open a GitHub issue for non-sensitive matters. For anything that would put
-users at risk if public, contact the maintainer privately first.
+users at risk if public, use GitHub's private vulnerability reporting (the
+repository's Security tab → "Report a vulnerability") rather than a public
+issue.
