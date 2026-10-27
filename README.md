@@ -17,6 +17,38 @@ the permission to reach the internet.
 
 <sub><b>Stable</b>: tested versions, recommended &middot; <b>Nightly</b>: rebuilt every night with cameras pulled live from OpenStreetMap &middot; <a href="https://github.com/phrag/SchattenWeg/releases">all releases</a> &middot; <a href="#download--install">how to install</a></sub>
 
+### Install in 4 steps
+
+1. **Download** the APK from the table above, using your phone's browser. It is
+   about 200 MB (the whole Berlin map is inside), so Wi-Fi is best.
+2. **Open the file.** If the browser says it "may be harmful", choose
+   **Download anyway**. That is the standard warning for any app outside a store.
+3. Android will say it can't install from this source. Tap **Settings**, switch
+   on **Allow from this source**, press **Back**.
+4. Tap **Install**, then **Open**. If *Play Protect* warns you, choose
+   **More details → Install anyway**.
+
+No account and no setup. Needs Android 10 or newer; works on GrapheneOS.
+
+### Update
+
+The app never goes online, so it can't update itself. To update:
+
+1. Open **☰ → About** to see the version you have.
+2. If the table above shows a newer one, download it and tap **Install**. Your
+   phone updates the app in place.
+
+Want an email when a new Stable version is out? On GitHub, choose
+**Watch → Custom → Releases**.
+
+**Stable or Nightly?** Stable is the tested version; pick it unless you want
+the newest cameras sooner. Nightly is rebuilt every night with cameras fresh from
+OpenStreetMap. Both use the same signing key, so you can switch freely.
+
+**Want to check the file is genuine?** Run `apksigner verify --print-certs
+schattenweg.apk` and compare the SHA-256 with the fingerprint in
+[SECURITY.md](SECURITY.md#signing-keys--never-in-this-repository).
+
 <p align="center">
   <img src="docs/screenshots/01-route.png" width="30%" alt="A walking route at High avoidance: 3356 m, 0% under watch, steering around clusters of mapped cameras">
   <img src="docs/screenshots/02-ai-zone-kottbusser-tor.png" width="30%" alt="Kottbusser Tor AI-video zone: its 30 police AI cameras mapped as purple dots with their coverage, and a card with the zone's status and what it detects">
@@ -43,50 +75,28 @@ the permission to reach the internet.
 
 ## Download & install
 
-There are two builds. Both are signed with the same release key, so you can
-switch between them and keep updating over the top.
+The quick steps are [at the top of this page](#install-in-4-steps). The details:
 
-- **Stable** is a numbered version (e.g. 0.2.3), cut when features are
+- **Stable** is a numbered version (e.g. 0.2.4), cut when features are
   finished. Its camera data is fresh from OpenStreetMap on the day it was
   released.
 - **Nightly** is whatever is on `main`, rebuilt **every night**. Its cameras
   are **pulled live from OpenStreetMap** (one Overpass query at build time), so
   they are minutes old rather than a day behind; roads and buildings still come
   from the daily Geofabrik extract. If Overpass is unreachable the build falls
-  back to the extract's own cameras. **Stable** stays on the data of its tag.
+  back to the extract's own cameras. The app's **About** section (☰) links to
+  the Nightly download.
+- Both are signed with the same release key, so you can switch between them
+  and keep updating over the top. Android won't install an older version over a
+  newer one; to go back, uninstall first.
 
-The download links, versions, build dates and camera counts are in the
-[table at the top](#schattenweg).
+On a computer instead? Download the same file and copy it to your phone.
+Older versions are on the
+[Releases page](https://github.com/phrag/SchattenWeg/releases), and the file is
+also under **Assets** on each release.
 
-Pick **Stable** unless you want the newest cameras or features before the next
-release. The app's **About** section (☰) links to the Nightly download.
-
-**On your Android phone:**
-
-1. **Tap one of the download links in the [table at the top](#schattenweg).**
-   It is about 200 MB because the whole Berlin map is inside, so use Wi-Fi. (The same file is under **Assets** on its
-   release page.)
-2. When it has downloaded, tap **Open** (or open it from your **Downloads**).
-   If your browser warns that the file "may be harmful", choose **Download
-   anyway** — that is the standard message for any app that isn't from a store.
-3. Android will say it can't install apps from this source. Tap **Settings**,
-   switch on **Allow from this source**, then press **Back**.
-4. Tap **Install**, then **Open**. If *Play Protect* shows a warning, choose
-   **More details → Install anyway**.
-
-That's it: no account, no sign-in, no setup, and the app never connects to the
-internet. You can turn "Allow from this source" off again afterwards.
-
-On a computer instead? Download the same file and copy it to your phone, or
-open this page on your phone.
-
-**Requirements:** Android 10 or newer. Works on de-Googled phones such as
-**GrapheneOS** — there are no Google Play Services to miss. Older versions are
-on the [Releases page](https://github.com/phrag/SchattenWeg/releases).
-
-> **Want to check it's genuine?** Every release is signed with the Schattenweg
-> release key; the certificate fingerprint is in [SECURITY.md](SECURITY.md). You
-> can also [build from source](#build-from-source).
+> **Want to check it's genuine?** The certificate fingerprint is in
+> [SECURITY.md](SECURITY.md). You can also [build from source](#build-from-source).
 
 Right now the data covers **Berlin only**.
 
