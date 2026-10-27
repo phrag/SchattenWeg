@@ -1,6 +1,17 @@
 # Schattenweg
 
 <p align="center">
+  <a href="https://github.com/phrag/SchattenWeg/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/phrag/SchattenWeg/ci.yml?branch=main&amp;label=CI" alt="CI"></a>
+  <a href="https://github.com/phrag/SchattenWeg/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/phrag/SchattenWeg/release.yml?branch=main&amp;label=Nightly" alt="Nightly"></a>
+  <a href="https://github.com/phrag/SchattenWeg/releases/latest"><img src="https://img.shields.io/github/v/release/phrag/SchattenWeg" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/phrag/SchattenWeg" alt="Licence: GPL-3.0"></a>
+  <img src="https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&amp;logoColor=white" alt="Android 10+">
+  <img src="https://img.shields.io/badge/permissions-no%20INTERNET-2ea44f" alt="No INTERNET permission">
+  <img src="https://img.shields.io/badge/Google%20Play%20Services-none-2ea44f" alt="No Google Play Services">
+  <img src="https://img.shields.io/badge/core-Rust-dea584?logo=rust&amp;logoColor=white" alt="Rust core">
+</p>
+
+<p align="center">
   <img src="docs/screenshots/01-ai-zone-kottbusser-tor.png" width="30%" alt="Kottbusser Tor AI-video zone: its police AI cameras mapped as purple dots with their coverage, and a card with one camera's AI-analysis tag, model and modelled cover">
   <img src="docs/screenshots/02-route.png" width="30%" alt="A walking route at High avoidance: 999 m, 0% under watch, steering around the AI-video zone and mapped cameras, with the Low / Medium / High control">
   <img src="docs/screenshots/03-camera-overview.png" width="30%" alt="Berlin-wide overview of the 4059 mapped cameras, densest in the centre">
