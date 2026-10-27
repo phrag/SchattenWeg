@@ -151,7 +151,7 @@ fn read_checked<R: Read>(r: &mut R, source: Option<u64>, zones: u64) -> io::Resu
     let mut magic = [0u8; 4];
     r.read_exact(&mut magic)?;
     if &magic != MAGIC {
-        return Err(bad("not a Schattenweg cache file"));
+        return Err(bad("not a SchattenWeg cache file"));
     }
     if read_u32(r)? != VERSION {
         return Err(bad("cache version mismatch"));

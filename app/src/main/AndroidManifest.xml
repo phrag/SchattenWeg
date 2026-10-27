@@ -35,7 +35,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
-        android:theme="@style/Theme.Schattenweg">
+        android:theme="@style/Theme.SchattenWeg">
 
         <activity
             android:name=".MainActivity"

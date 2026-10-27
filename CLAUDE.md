@@ -7,7 +7,7 @@ was decided and why**, so future work doesn't re-litigate settled questions.
 
 ## 1. What we're building
 
-**Schattenweg** ("shadow path") — a privacy- and security-first Android app that:
+**SchattenWeg** ("shadow path") — a privacy- and security-first Android app that:
 
 1. Maps CCTV cameras in **Berlin** (only, for now) from OpenStreetMap.
 2. Lets the user **plan a walking route that avoids cameras**, trading detour

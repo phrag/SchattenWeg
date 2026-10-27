@@ -1,4 +1,4 @@
-# Schattenweg
+# SchattenWeg
 
 <p align="center">
   <img src="docs/screenshots/01-ai-zone-kottbusser-tor.png" width="30%" alt="Kottbusser Tor AI-video zone: its police AI cameras mapped as purple dots with their coverage, and a card with one camera's AI-analysis tag, model and modelled cover">
@@ -9,10 +9,10 @@
 A private, secure, offline Android app that maps Berlin's CCTV cameras and plans walking routes that **avoid** them.
 Free and Open Source!
 
-> *Schattenweg* — "Shadow Path".
+> *SchattenWeg* — "Shadow Path".
 
 <p align="center">
-  <a href="https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk"><img src="https://img.shields.io/badge/%E2%AC%87%20Download%20for%20Android-Schattenweg-2ea44f?style=for-the-badge&logo=android&logoColor=white" alt="Download Schattenweg for Android"></a>
+  <a href="https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk"><img src="https://img.shields.io/badge/%E2%AC%87%20Download%20for%20Android-SchattenWeg-2ea44f?style=for-the-badge&logo=android&logoColor=white" alt="Download SchattenWeg for Android"></a>
 </p>
 <p align="center">
   Latest Stable version &middot; 112 MB &middot; Android 10 or newer &middot; free, no account
@@ -109,7 +109,7 @@ Right now the data covers **Berlin only**.
 - **Shows the cameras.** Every `man_made=surveillance` camera OpenStreetMap
   knows about in Berlin, drawn on an offline map with its modelled field of
   view. Long-press one to see its details.
-- **Routes around them.** Pick a start and a destination and Schattenweg finds a
+- **Routes around them.** Pick a start and a destination and SchattenWeg finds a
   walking route that stays out of camera view where it reasonably can. A simple
   **Low / Medium / High** control sets how much extra walking you'll accept to
   dodge a lens. Every new route starts on **High**, so when a camera-free route
@@ -151,7 +151,7 @@ Once it's installed, there's nothing to set up — open it and go:
    street, neighbourhood or station, or just **tap the map** to drop a start
    point and then a destination (white dots). **Long-press empty map** to undo
    the last point.
-3. **Get a quieter route.** Schattenweg draws a walking route that stays out of
+3. **Get a quieter route.** SchattenWeg draws a walking route that stays out of
    camera view where it reasonably can. If a camera-free route exists, it picks
    that one for you automatically. The route is drawn in green, with its length
    and the share of it that is under watch shown at the top.
@@ -333,7 +333,7 @@ like missing data but isn't. Build the OpenGL ES variant instead:
 The app logs the basemap it found and any MapLibre load failure:
 
 ```bash
-adb logcat -s Schattenweg:V Mbgl:V vulkan:V
+adb logcat -s SchattenWeg:V Mbgl:V vulkan:V
 ```
 
 ### How routing works, in one line
@@ -432,15 +432,15 @@ personal details.
 ## Credits
 
 - Camera, street and place data are **© [OpenStreetMap](https://www.openstreetmap.org/)
-  contributors** — the whole map is their work, and Schattenweg is only useful
+  contributors** — the whole map is their work, and SchattenWeg is only useful
   because they mapped it.
 - Inspired by **[osmcamera.dihe.de](https://osmcamera.dihe.de/)**, the OSM camera
-  map that first prompted this project. Schattenweg reads OpenStreetMap directly
+  map that first prompted this project. SchattenWeg reads OpenStreetMap directly
   rather than building on it (see [CLAUDE.md](CLAUDE.md) for the reasoning).
 
 ## Licence
 
-Schattenweg is **GPL-3.0-or-later** (see [`LICENSE`](LICENSE)).
+SchattenWeg is **GPL-3.0-or-later** (see [`LICENSE`](LICENSE)).
 
 Map data is **© OpenStreetMap contributors**, available under the
 [Open Database Licence (ODbL) 1.0](https://www.openstreetmap.org/copyright); the

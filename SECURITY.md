@@ -1,6 +1,6 @@
 # Security & privacy posture
 
-Schattenweg is a surveillance-avoidance tool. A tool like that which phones
+SchattenWeg is a surveillance-avoidance tool. A tool like that which phones
 home, leaks a route, or ships a forgeable build is worse than useless — it is
 actively dangerous to the person trusting it. This file records what the app
 does about that, and what it deliberately does not promise.

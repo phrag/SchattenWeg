@@ -1,9 +1,9 @@
 # Third-party licences
 
-Schattenweg itself is **GPL-3.0-or-later** (see [`LICENSE`](LICENSE)). The app
+SchattenWeg itself is **GPL-3.0-or-later** (see [`LICENSE`](LICENSE)). The app
 and its data bundle the third-party work listed below. Each entry links to the
 upstream project, where the full licence text lives; the licences are all
-compatible with distributing Schattenweg under the GPL.
+compatible with distributing SchattenWeg under the GPL.
 
 The **in-app About section** (☰ → About) links here, and to the OpenStreetMap
 and OpenMapTiles licences directly. The two licences that require their text to

@@ -43,7 +43,7 @@ nodes += [
     # indexed (a cafe is not something you navigate by).
     (110, "52.5205", "13.4020", [("place", "quarter"), ("name", "Mitte")]),
     (111, "52.5208", "13.4030", [("railway", "station"),
-                                 ("name", "Bahnhof Schattenweg")]),
+                                 ("name", "Bahnhof SchattenWeg")]),
     (112, "52.5203", "13.4010", [("amenity", "cafe"), ("name", "Cafe Blende")]),
     # Non-camera surveillance: ingest must drop both.
     (102, "52.5205", "13.3990", [("man_made", "surveillance"),

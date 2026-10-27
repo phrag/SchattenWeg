@@ -916,7 +916,7 @@ private fun LayersPanel(
             )
             version?.let {
                 Text(
-                    "Schattenweg v$it",
+                    "SchattenWeg v$it",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF9AA4B2),
                 )
@@ -949,7 +949,7 @@ private fun LayersPanel(
                 color = Color(0xFF7FD4A2),
                 modifier = Modifier.clickable { onOpenLicenses() },
             )
-            LinkText("Schattenweg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
+            LinkText("SchattenWeg on GitHub", PROJECT_URL, Modifier.padding(top = 2.dp))
             LinkText("Report a problem", ISSUES_URL)
         }
     }
@@ -1383,7 +1383,7 @@ private fun StatusCard(state: RouteViewModel.UiState, modifier: Modifier = Modif
 }
 
 /** How far around the viewport centre to pull cameras for the map layer. */
-private const val TAG = "Schattenweg"
+private const val TAG = "SchattenWeg"
 
 /**
  * How far to ask for cameras, derived from what is actually on screen.
