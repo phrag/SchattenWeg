@@ -1,9 +1,9 @@
 # Schattenweg
 
 <p align="center">
-  <img src="docs/screenshots/01-route.png" width="30%" alt="A walking route at High avoidance: 3356 m, 0% under watch, steering around clusters of mapped cameras">
-  <img src="docs/screenshots/02-ai-zone-kottbusser-tor.png" width="30%" alt="Kottbusser Tor AI-video zone: its 30 police AI cameras mapped as purple dots with their coverage, and a card with the zone's status and what it detects">
-  <img src="docs/screenshots/03-ai-zone-goerlitzer-park.png" width="30%" alt="Görlitzer Park planned AI-video zone, shown as an approximate circle">
+  <img src="docs/screenshots/01-ai-zone-kottbusser-tor.png" width="30%" alt="Kottbusser Tor AI-video zone: its police AI cameras mapped as purple dots with their coverage, and a card with one camera's AI-analysis tag, model and modelled cover">
+  <img src="docs/screenshots/02-route.png" width="30%" alt="A walking route at High avoidance: 999 m, 0% under watch, steering around the AI-video zone and mapped cameras, with the Low / Medium / High control">
+  <img src="docs/screenshots/03-camera-overview.png" width="30%" alt="Berlin-wide overview of the 4059 mapped cameras, densest in the centre">
 </p>
 <p align="center"><sub>A camera-free route at <b>High</b> avoidance &middot; police AI-video zones (violet circles), long-press for details</sub></p>
 
