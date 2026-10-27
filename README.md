@@ -5,56 +5,58 @@
   <img src="docs/screenshots/02-route.png" width="30%" alt="A walking route at High avoidance: 999 m, 0% under watch, steering around the AI-video zone and mapped cameras, with the Low / Medium / High control">
   <img src="docs/screenshots/03-camera-overview.png" width="30%" alt="Berlin-wide overview of the 4059 mapped cameras, densest in the centre">
 </p>
-<p align="center"><sub>A camera-free route at <b>High</b> avoidance &middot; police AI-video zones (violet circles), long-press for details</sub></p>
 
 A private, secure, offline Android app that maps Berlin's CCTV cameras and plans walking routes that **avoid** them.
 Free and Open Source!
 
 > *Schattenweg* — "Shadow Path".
 
-It works **completely offline**. The map, the camera data, the search box and
-the routing all live on your phone. Nothing you do — where you are, where you're
-going, the route you take — ever leaves the device. The app doesn't even hold
-the permission to reach the internet.
+<p align="center">
+  <a href="https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk"><img src="https://img.shields.io/badge/%E2%AC%87%20Download%20for%20Android-Schattenweg-2ea44f?style=for-the-badge&logo=android&logoColor=white" alt="Download Schattenweg for Android"></a>
+</p>
+<p align="center">
+  Latest Stable version &middot; 112 MB &middot; Android 10 or newer &middot; free, no account
+</p>
+
+### Install in 3 steps
+
+1. **Tap the green button** above on your phone. If your browser says the file
+   "may be harmful", tap **Download anyway**. Every app from outside a store
+   gets that warning.
+2. **Open the downloaded file.** If Android says it can't install from this
+   source, tap **Settings**, switch on **Allow from this source**, then go back.
+3. **Tap Install**, then **Open**. If *Play Protect* warns you, tap
+   **More details → Install anyway**.
+
+That's it. Nothing to set up. Works on GrapheneOS too.
+
+> The file is large because the whole Berlin map is inside, so Wi-Fi is best.
+
+### Update
+
+Download the newest version the same way and tap **Install**. It replaces the
+old one and keeps working. **☰ → About** in the app shows which version you
+have. To get an email for new versions, use **Watch → Custom → Releases** on
+GitHub.
+
+<details>
+<summary><b>Other versions, and checking the file is genuine</b></summary>
 
 | Channel | Download | Version | Built | Cameras | Details |
 |---|---|---|---|---|---|
 | **Stable** (recommended) | **[⬇ schattenweg.apk](https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk)** | ![Stable version](https://img.shields.io/github/v/release/phrag/SchattenWeg?label=&color=2ea44f) | ![Stable build date](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.built&label=&color=2ea44f) | ![Cameras in Stable](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.cameras&label=&color=2ea44f) | [Release notes](https://github.com/phrag/SchattenWeg/releases/latest) |
 | **Nightly** | **[⬇ schattenweg-latest.apk](https://github.com/phrag/SchattenWeg/releases/download/latest/schattenweg-latest.apk)** | ![Nightly commit](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.commit&prefix=main%40&label=&color=b48cf2) | ![Nightly build date](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.built&label=&color=b48cf2) | ![Cameras in Nightly](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Fdownload%2Flatest%2Fbuild-info.json&query=%24.cameras&label=&color=b48cf2) | [Build info](https://github.com/phrag/SchattenWeg/releases/tag/latest) |
 
-<sub><b>Stable</b>: tested versions, recommended &middot; <b>Nightly</b>: rebuilt every night with cameras pulled live from OpenStreetMap &middot; <a href="https://github.com/phrag/SchattenWeg/releases">all releases</a> &middot; <a href="#download--install">how to install</a></sub>
-
-### Install in 4 steps
-
-1. **Download** the APK from the table above, using your phone's browser. It is
-   about 200 MB (the whole Berlin map is inside), so Wi-Fi is best.
-2. **Open the file.** If the browser says it "may be harmful", choose
-   **Download anyway**. That is the standard warning for any app outside a store.
-3. Android will say it can't install from this source. Tap **Settings**, switch
-   on **Allow from this source**, press **Back**.
-4. Tap **Install**, then **Open**. If *Play Protect* warns you, choose
-   **More details → Install anyway**.
-
-No account and no setup. Needs Android 10 or newer; works on GrapheneOS.
-
-### Update
-
-The app never goes online, so it can't update itself. To update:
-
-1. Open **☰ → About** to see the version you have.
-2. If the table above shows a newer one, download it and tap **Install**. Your
-   phone updates the app in place.
-
-Want an email when a new Stable version is out? On GitHub, choose
-**Watch → Custom → Releases**.
+<sub><b>Stable</b>: tested versions, recommended &middot; <b>Nightly</b>: rebuilt every night with cameras pulled live from OpenStreetMap &middot; <a href="https://github.com/phrag/SchattenWeg/releases">all releases</a></sub>
 
 **Stable or Nightly?** Stable is the tested version; pick it unless you want
-the newest cameras sooner. Nightly is rebuilt every night with cameras fresh from
-OpenStreetMap. Both use the same signing key, so you can switch freely.
+the newest cameras sooner. Both use the same signing key, so you can switch freely.
 
-**Want to check the file is genuine?** Run `apksigner verify --print-certs
+**Check the file is genuine:** run `apksigner verify --print-certs
 schattenweg.apk` and compare the SHA-256 with the fingerprint in
 [SECURITY.md](SECURITY.md#signing-keys--never-in-this-repository).
+
+</details>
 
 ---
 
@@ -75,7 +77,7 @@ schattenweg.apk` and compare the SHA-256 with the fingerprint in
 
 ## Download & install
 
-The quick steps are [at the top of this page](#install-in-4-steps). The details:
+The quick steps are [at the top of this page](#install-in-3-steps). The details:
 
 - **Stable** is a numbered version (e.g. 0.2.4), cut when features are
   finished. Its camera data is fresh from OpenStreetMap on the day it was
