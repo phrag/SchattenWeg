@@ -1,5 +1,12 @@
 # Schattenweg
 
+<p align="center">
+  <img src="docs/screenshots/01-route.png" width="30%" alt="A walking route at High avoidance: 3356 m, 0% under watch, steering around clusters of mapped cameras">
+  <img src="docs/screenshots/02-ai-zone-kottbusser-tor.png" width="30%" alt="Kottbusser Tor AI-video zone: its 30 police AI cameras mapped as purple dots with their coverage, and a card with the zone's status and what it detects">
+  <img src="docs/screenshots/03-ai-zone-goerlitzer-park.png" width="30%" alt="Görlitzer Park planned AI-video zone, shown as an approximate circle">
+</p>
+<p align="center"><sub>A camera-free route at <b>High</b> avoidance &middot; police AI-video zones (violet circles), long-press for details</sub></p>
+
 A private, secure, offline Android app that maps Berlin's CCTV cameras and plans walking routes that **avoid** them.
 Free and Open Source!
 
@@ -48,13 +55,6 @@ OpenStreetMap. Both use the same signing key, so you can switch freely.
 **Want to check the file is genuine?** Run `apksigner verify --print-certs
 schattenweg.apk` and compare the SHA-256 with the fingerprint in
 [SECURITY.md](SECURITY.md#signing-keys--never-in-this-repository).
-
-<p align="center">
-  <img src="docs/screenshots/01-route.png" width="30%" alt="A walking route at High avoidance: 3356 m, 0% under watch, steering around clusters of mapped cameras">
-  <img src="docs/screenshots/02-ai-zone-kottbusser-tor.png" width="30%" alt="Kottbusser Tor AI-video zone: its 30 police AI cameras mapped as purple dots with their coverage, and a card with the zone's status and what it detects">
-  <img src="docs/screenshots/03-ai-zone-goerlitzer-park.png" width="30%" alt="Görlitzer Park planned AI-video zone, shown as an approximate circle">
-</p>
-<p align="center"><sub>A camera-free route at <b>High</b> avoidance &middot; police AI-video zones (violet circles), long-press for details</sub></p>
 
 ---
 
