@@ -37,7 +37,7 @@
 const M_PER_DEG_LAT: f64 = 111_320.0;
 
 /// When the table below was last checked against its sources.
-pub const AS_OF: &str = "26 October 2026";
+pub const AS_OF: &str = "28 October 2026";
 
 /// How far along a zone is. Both count for routing today.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -105,7 +105,7 @@ pub fn table() -> Vec<AiZone> {
             150.0,
             Commissioning,
             "About 30 cameras, all 30 now mapped in OpenStreetMap (purple dots). \
-Set-up and calibration began 24 Sep 2026, roughly four weeks, then a test phase. \
+Set-up and calibration began 24 Sep 2026; by 28 Oct the police show the test phase as reached. \
 Not yet issuing alerts.",
             POLICE_DETECTS,
         ),
