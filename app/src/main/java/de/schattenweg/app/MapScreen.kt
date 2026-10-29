@@ -55,6 +55,9 @@ import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.PlatformTextInputInterceptor
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -651,6 +654,19 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             CompassButton(bearing.value) {
                 mapRef.value?.animateCamera(CameraUpdateFactory.bearingTo(0.0), 400)
             }
+            ThreeDButton(on = threeDOn) {
+                // One tap flips between the tilted 3D view and the flat
+                // bird's-eye view. The tilt follows from the layer state (see
+                // the LaunchedEffect above), so this only flips the layer, and
+                // switches the flat buildings back on if they were hidden since
+                // the extrusion needs them.
+                if (threeDOn) {
+                    layersOn[LayerGroup.BUILDINGS_3D] = false
+                } else {
+                    layersOn[LayerGroup.BUILDINGS] = true
+                    layersOn[LayerGroup.BUILDINGS_3D] = true
+                }
+            }
             ZoomButton("\u2261") { panelOpen.value = !panelOpen.value }
             ZoomButton("+") {
                 mapRef.value?.animateCamera(CameraUpdateFactory.zoomIn())
@@ -1202,6 +1218,34 @@ private fun CompassButton(bearing: Double, onClick: () -> Unit) {
                 style = MaterialTheme.typography.titleLarge,
                 color = Color(0xFFF2F4F8),
                 modifier = Modifier.rotate(-bearing.toFloat()),
+            )
+        }
+    }
+}
+
+/**
+ * Toggles between the tilted 3D view and the flat bird's-eye view. Lit green
+ * while 3D is on so the state reads at a glance.
+ */
+@Composable
+private fun ThreeDButton(on: Boolean, onClick: () -> Unit) {
+    Card(
+        Modifier
+            .size(44.dp)
+            .semantics {
+                contentDescription = "3D view"
+                stateDescription = if (on) "On" else "Off, bird's-eye view"
+            }
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (on) Color(0xFF2E7D55) else Color(0xE6161B22),
+        ),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                "3D",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFF2F4F8),
             )
         }
     }
