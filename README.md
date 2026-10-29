@@ -235,7 +235,7 @@ All of these are shown inside the app, on purpose.
 ## Where the AI-camera facts come from
 
 The AI-video zone cards and the AI-camera dots rest on public sources, not
-guesswork. Each claim below was last checked on **28 October 2026**. The zone
+guesswork. Each claim below was last checked on **29 October 2026**. The zone
 table itself lives in [`core/src/zones.rs`](core/src/zones.rs); update it and
 this list together.
 
@@ -253,22 +253,27 @@ this list together.
 | Black screen until the software flags an event; an officer then decides | Confirmed | Press release No. 1252; Drucksache 19/26970, answer to Q6 |
 | Police say faces are not analysed and live biometric identification is not allowed under the ASOG Bln | Police claim, unverified | [Polizei Berlin FAQ](https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php). No independent audit is public, and the Senate declined technical detail (Drucksache 19/26970, answer 1d) |
 | The software vendor advertises "cross-camera, non-biometric tracking" of people; how people are matched between cameras is not stated | Vendor marketing, unverified | [Staige](https://staige.com/en) |
+| Officers see unpixelated footage once an alert fires (Spranger had said "stick figures" in the summer and admitted on 28 Oct that this was wrong); footage is kept for one month unless it becomes evidence; the new police law allows biometric searches for suspects | Confirmed (press report of the demonstration) | [taz, 28 Oct 2026](https://taz.de/KI-Videoueberwachung-in-Kreuzberg/!6225655/) |
 | Signs at every entrance to a covered area | Confirmed (promised) | Drucksache 19/26970, answer to Q1b |
 | No boundaries or camera positions published | Confirmed | Neither the press release nor the FAQ gives them, and the Senate declined further technical detail on security grounds (Drucksache 19/26970, answer to Q1d) |
 | Building-protection pilots at the Rotes Rathaus, the Altes Stadthaus and the Jüdisches Museum: test phase Q2 2027, live trial Q3–Q4 2027 | Confirmed | Drucksache 19/26970, answer to Q4 |
 | What the building pilots detect: entering closed areas, crossing virtual lines, climbing fences or walls, vandalism and abandoned objects | Confirmed | Drucksache 19/26970, answer to Q6 |
 | Cameras at Südkreuz station tagged `camera:features=facedetection` | Confirmed, but historical | [OpenStreetMap](https://www.openstreetmap.org/node/5570745329) (6 nodes); the trial ran 1 Aug 2017 – 31 Jul 2018 ([Bundestag hib 792/2018](https://www.bundestag.de/presse/hib/-/575144)) |
 
-What the sources do **not** settle yet: when the Kottbusser Tor test phase
-began and whether the system is already analysing people. The police FAQ's
-status graphic changed between 27 and 28 October from "Phase 2 Konfiguration
-umgesetzt" to "Phase 3 Testphase umgesetzt" and says nothing is detected or
-reported yet, but no press release gives a date. A
+What the sources do **not** settle yet: when the Kottbusser Tor system goes
+fully live. On 28 October the police and Senator Spranger demonstrated it to
+the press in the Kottiwache with staged actors, but taz reports it is still in
+its test phase and due to go live the following week
+([taz, 28 Oct](https://taz.de/KI-Videoueberwachung-in-Kreuzberg/!6225655/)).
+The police FAQ's status graphic reads "Phase 3 Testphase umgesetzt" and says
+nothing is detected or reported yet. A
 [netzpolitik.org commentary of 23 Oct](https://netzpolitik.org/2026/koalitionsverhandlungen-in-berlin-rot-rot-gruen-muss-ki-kameras-stoppen/)
-says the software has been evaluating people's behaviour there since 6 October.
-Also open is taz's March report of mobile cameras outside
-the Abgeordnetenhaus, which the Senate's September answer does not list. The
-app leaves the open points out until a source confirms them.
+claims the software has been evaluating people's behaviour there since
+6 October. For the other sites Spranger now says "there is no timetable"
+(taz), which sits uneasily with the Senate's September dates above; the table
+keeps the written answer. Also open is taz's March report of mobile cameras
+outside the Abgeordnetenhaus, which the Senate's September answer does not
+list. The app leaves the open points out until a source confirms them.
 
 ---
 
