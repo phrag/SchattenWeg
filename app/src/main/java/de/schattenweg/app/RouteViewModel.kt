@@ -338,4 +338,4 @@ enum class AvoidanceLevel(val label: String, val lambda: Double) {
     HIGH("High", 6.0),
 }
 
-private const val TAG = "Schattenweg"
+private const val TAG = "SchattenWeg"

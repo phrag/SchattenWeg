@@ -1,6 +1,6 @@
 //! schattenweg-core
 //! ================
-//! Rust core for the Schattenweg app: OSM ingest, surveillance-exposure
+//! Rust core for the SchattenWeg app: OSM ingest, surveillance-exposure
 //! scoring, and camera-aware routing. Everything runs on-device — no network,
 //! no server. The UI (Kotlin/Compose) talks to exactly the surface defined
 //! here through UniFFI.

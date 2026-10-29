@@ -19,14 +19,14 @@ class MainActivity : ComponentActivity() {
         viewModel.provision()
 
         setContent {
-            MaterialTheme(colorScheme = SchattenwegColors) {
+            MaterialTheme(colorScheme = SchattenWegColors) {
                 MapScreen(viewModel)
             }
         }
     }
 }
 
-private val SchattenwegColors = darkColorScheme(
+private val SchattenWegColors = darkColorScheme(
     primary = Color(0xFF7FD4A2),
     background = Color(0xFF10141A),
     surface = Color(0xFF161B22),

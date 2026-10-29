@@ -270,7 +270,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           {
-            echo "Offline build of Schattenweg with the Berlin map data bundled"
+            echo "Offline build of SchattenWeg with the Berlin map data bundled"
             echo "(routing snapshot + vector basemap + labels), so it maps and"
             echo "routes out of the box."
             echo ""
@@ -287,11 +287,11 @@ jobs:
             echo "| Cameras routed around | $cameras (of $surveillance surveillance nodes) |"
             echo ""
             if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-              echo "**Signed with the Schattenweg release key.** Verify the"
+              echo "**Signed with the SchattenWeg release key.** Verify the"
               echo "certificate fingerprint against SECURITY.md before installing."
             elif [ "$SIGNED" = "true" ]; then
               echo "**Development build** of \`main\`: unreleased code, but signed"
-              echo "with the Schattenweg release key, so it installs over (and is"
+              echo "with the SchattenWeg release key, so it installs over (and is"
               echo "updated by) versioned releases. Verify the certificate"
               echo "fingerprint against SECURITY.md before installing."
             else
