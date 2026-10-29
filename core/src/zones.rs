@@ -108,7 +108,7 @@ pub fn table() -> Vec<AiZone> {
 Set-up began 24 Sep 2026; the police now show the test phase as reached. \
 netzpolitik.org reports the software has been analysing behaviour here since 6 Oct; \
 the police FAQ says it issues no alerts yet. Shown to the press on 28 Oct; \
-taz reports it is due to go live the following week.",
+nd says all 30 cameras run permanently from November, taz that go-live is due next week.",
             POLICE_DETECTS,
         ),
         zone(
