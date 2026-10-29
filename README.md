@@ -51,6 +51,10 @@ GitHub.
 <details>
 <summary><b>Other versions, and checking the file is genuine</b></summary>
 
+<p align="center">
+  <a href="https://grapheneos.org"><img src="https://img.shields.io/badge/GrapheneOS-tested-2ea44f" alt="Tested on GrapheneOS"></a>
+</p>
+
 | Channel | Download | Version | Built | Cameras | Details |
 |---|---|---|---|---|---|
 | **Stable** (recommended) | **[⬇ schattenweg.apk](https://github.com/phrag/SchattenWeg/releases/latest/download/schattenweg.apk)** | ![Stable version](https://img.shields.io/github/v/release/phrag/SchattenWeg?label=&color=2ea44f) | ![Stable build date](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.built&label=&color=2ea44f) | ![Cameras in Stable](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fphrag%2FSchattenWeg%2Freleases%2Flatest%2Fdownload%2Fbuild-info.json&query=%24.cameras&label=&color=2ea44f) | [Release notes](https://github.com/phrag/SchattenWeg/releases/latest) |
