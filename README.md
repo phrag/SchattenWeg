@@ -235,7 +235,7 @@ All of these are shown inside the app, on purpose.
 ## Where the AI-camera facts come from
 
 The AI-video zone cards and the AI-camera dots rest on public sources, not
-guesswork. Each claim below was last checked on **28 October 2026**. The zone
+guesswork. Each claim below was last checked on **29 October 2026**. The zone
 table itself lives in [`core/src/zones.rs`](core/src/zones.rs); update it and
 this list together.
 
@@ -244,7 +244,7 @@ this list together.
 | Police AI video ("KI-gestützter Videoschutz") starts at Kottbusser Tor; configuration of the cameras began 24 Sep 2026, takes about four weeks, then a test phase follows; the FAQ's status graphic now reads "Phase 3 Testphase umgesetzt" (28 Oct 2026) | Confirmed | [Polizei Berlin press release No. 1252, 24 Sep 2026](https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1718008.php); [FAQ](https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php) |
 | Not issuing alerts yet: during configuration and testing the system detects and reports nothing, and is not yet running 24/7 | Confirmed | [Polizei Berlin FAQ on KI-gestützter Videoschutz](https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php) |
 | Software has been evaluating people's behaviour at Kottbusser Tor since 6 Oct 2026 | Press claim (commentary), unconfirmed; the police FAQ says nothing is detected or reported during the test phase | [netzpolitik.org, 23 Oct 2026](https://netzpolitik.org/2026/koalitionsverhandlungen-in-berlin-rot-rot-gruen-muss-ki-kameras-stoppen/) |
-| About 30 cameras at Kottbusser Tor | Confirmed (police figure via press) | [netzpolitik.org, 23 Aug 2026](https://netzpolitik.org/2026/verhaltensscanner-in-berlin-jetzt-beginnt-die-automatisierte-ueberwachung/), quoting Polizei Berlin; the police's own pages give no number |
+| About 30 cameras at Kottbusser Tor | Confirmed (police figure via press; nd, 28 Oct, also says 30) | [netzpolitik.org, 23 Aug 2026](https://netzpolitik.org/2026/verhaltensscanner-in-berlin-jetzt-beginnt-die-automatisierte-ueberwachung/), quoting Polizei Berlin; the police's own pages give no number |
 | All 30 are mapped in OpenStreetMap (`camera:features=artificial intelligence`, `operator=Polizei Berlin`) | Confirmed (counted in the OSM API) | [OpenStreetMap, Kottbusser Tor](https://www.openstreetmap.org/#map=19/52.4990/13.4178) |
 | Warschauer Brücke: planned by the end of 2026, no firm date | Confirmed | [Senate answer, Drucksache 19/26970, 6 Sep 2026](https://pardok.parlament-berlin.de/starweb/adis/citat/VT/19/SchrAnfr/S19-26970.pdf), answer to Q1 |
 | Alexanderplatz and Görlitzer Park: planned for 2027 | Confirmed | Drucksache 19/26970, answer to Q2; order Warschauer Brücke → Alexanderplatz → Görlitzer Park/Wrangelkiez in the press release |
@@ -253,22 +253,28 @@ this list together.
 | Black screen until the software flags an event; an officer then decides | Confirmed | Press release No. 1252; Drucksache 19/26970, answer to Q6 |
 | Police say faces are not analysed and live biometric identification is not allowed under the ASOG Bln | Police claim, unverified | [Polizei Berlin FAQ](https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php). No independent audit is public, and the Senate declined technical detail (Drucksache 19/26970, answer 1d) |
 | The software vendor advertises "cross-camera, non-biometric tracking" of people; how people are matched between cameras is not stated | Vendor marketing, unverified | [Staige](https://staige.com/en) |
+| The software works on a stick-figure model, but an alert makes the Kottiwache screen beep and show the unpixelated video, and the officer decides on a response; it targets hitting, kicking and people lying on the ground. Footage is kept up to 28 days (longer if evidence, and then the BKA face-recognition software may be used). The police say the cameras must be switched off during assemblies, shown by their red lights going out. Spranger had said officers would see only "stick figures" and admitted on 28 Oct that this was wrong | Confirmed (press reports of the 28 Oct demonstration; nd gives 28 days, taz "one month") | [nd, 28 Oct 2026](https://www.nd-aktuell.de/artikel/1203508.ueberwachung-ki-am-kotti-kamera-laeuft.html); [taz, 28 Oct 2026](https://taz.de/KI-Videoueberwachung-in-Kreuzberg/!6225655/) |
 | Signs at every entrance to a covered area | Confirmed (promised) | Drucksache 19/26970, answer to Q1b |
 | No boundaries or camera positions published | Confirmed | Neither the press release nor the FAQ gives them, and the Senate declined further technical detail on security grounds (Drucksache 19/26970, answer to Q1d) |
 | Building-protection pilots at the Rotes Rathaus, the Altes Stadthaus and the Jüdisches Museum: test phase Q2 2027, live trial Q3–Q4 2027 | Confirmed | Drucksache 19/26970, answer to Q4 |
 | What the building pilots detect: entering closed areas, crossing virtual lines, climbing fences or walls, vandalism and abandoned objects | Confirmed | Drucksache 19/26970, answer to Q6 |
 | Cameras at Südkreuz station tagged `camera:features=facedetection` | Confirmed, but historical | [OpenStreetMap](https://www.openstreetmap.org/node/5570745329) (6 nodes); the trial ran 1 Aug 2017 – 31 Jul 2018 ([Bundestag hib 792/2018](https://www.bundestag.de/presse/hib/-/575144)) |
 
-What the sources do **not** settle yet: when the Kottbusser Tor test phase
-began and whether the system is already analysing people. The police FAQ's
-status graphic changed between 27 and 28 October from "Phase 2 Konfiguration
-umgesetzt" to "Phase 3 Testphase umgesetzt" and says nothing is detected or
-reported yet, but no press release gives a date. A
+What the sources do **not** settle yet: when the Kottbusser Tor system goes
+fully live. On 28 October the police and Senator Spranger presented it to the
+press in the Kottiwache. nd says 30 cameras run permanently from November
+([nd, 28 Oct](https://www.nd-aktuell.de/artikel/1203508.ueberwachung-ki-am-kotti-kamera-laeuft.html)); taz says it is still in its test phase and due to go
+live the following week
+([taz, 28 Oct](https://taz.de/KI-Videoueberwachung-in-Kreuzberg/!6225655/)).
+The police FAQ's status graphic reads "Phase 3 Testphase umgesetzt" and says
+nothing is detected or reported yet. A
 [netzpolitik.org commentary of 23 Oct](https://netzpolitik.org/2026/koalitionsverhandlungen-in-berlin-rot-rot-gruen-muss-ki-kameras-stoppen/)
-says the software has been evaluating people's behaviour there since 6 October.
-Also open is taz's March report of mobile cameras outside
-the Abgeordnetenhaus, which the Senate's September answer does not list. The
-app leaves the open points out until a source confirms them.
+claims the software has been evaluating people's behaviour there since
+6 October. For the other sites Spranger now says "there is no timetable"
+(taz), which sits uneasily with the Senate's September dates above; the table
+keeps the written answer. Also open is taz's March report of mobile cameras
+outside the Abgeordnetenhaus, which the Senate's September answer does not
+list. The app leaves the open points out until a source confirms them.
 
 ---
 
