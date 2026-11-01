@@ -257,22 +257,25 @@ this list together.
 | Black screen until the software flags an event; an officer then decides | Confirmed | Press release No. 1252; Drucksache 19/26970, answer to Q6 |
 | Police say faces are not analysed and live biometric identification is not allowed under the ASOG Bln | Police claim, unverified | [Polizei Berlin FAQ](https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php). No independent audit is public, and the Senate declined technical detail (Drucksache 19/26970, answer 1d) |
 | The software vendor advertises "cross-camera, non-biometric tracking" of people; how people are matched between cameras is not stated | Vendor marketing, unverified | [Staige](https://staige.com/en) |
-| The software works on a stick-figure model, but an alert makes the Kottiwache screen beep and show the unpixelated video, and the officer decides on a response; it targets hitting, kicking and people lying on the ground. Footage is kept up to 28 days (longer if evidence, and then the BKA face-recognition software may be used). The police say the cameras must be switched off during assemblies, shown by their red lights going out. Spranger had said officers would see only "stick figures" and admitted on 28 Oct that this was wrong | Confirmed (press reports of the 28 Oct demonstration; nd gives 28 days, taz "one month") | [nd, 28 Oct 2026](https://www.nd-aktuell.de/artikel/1203508.ueberwachung-ki-am-kotti-kamera-laeuft.html); [taz, 28 Oct 2026](https://taz.de/KI-Videoueberwachung-in-Kreuzberg/!6225655/) |
+| The software works on a stick-figure model, but an alert makes the Kottiwache screen beep and show the unpixelated video, and the officer decides on a response; it targets hitting, kicking and people lying on the ground. Footage is kept 28 to 30 days depending on the report (longer if evidence, and then the BKA face-recognition software may be used). The police say the cameras must be switched off during assemblies, shown by their red lights going out. Spranger had said officers would see only "stick figures" and admitted on 28 Oct that this was wrong | Confirmed (press reports of the 28 Oct demonstration; nd gives up to 28 days, [BERLINboxx](https://berlinboxx.de/ki-videoueberwachung-am-kottbusser-tor.html) and dpa 30 days, taz "one month") | [nd, 28 Oct 2026](https://www.nd-aktuell.de/artikel/1203508.ueberwachung-ki-am-kotti-kamera-laeuft.html); [taz, 28 Oct 2026](https://taz.de/KI-Videoueberwachung-in-Kreuzberg/!6225655/) |
 | Signs at every entrance to a covered area | Confirmed (promised) | Drucksache 19/26970, answer to Q1b |
 | No boundaries or camera positions published | Confirmed | Neither the press release nor the FAQ gives them, and the Senate declined further technical detail on security grounds (Drucksache 19/26970, answer to Q1d) |
 | Building-protection pilots at the Rotes Rathaus, the Altes Stadthaus and the Jüdisches Museum: test phase Q2 2027, live trial Q3–Q4 2027 | Confirmed | Drucksache 19/26970, answer to Q4 |
+| Planned AI cameras at the Abgeordnetenhaus were dropped; the Rotes Rathaus and the Senate interior administration pilots go ahead (this resolves taz's March report of mobile cameras outside the Abgeordnetenhaus, which the Senate's September answer never listed) | Confirmed (Innenverwaltung spokesperson, "only an option, not a decision") | [Tagesspiegel, 19 Mar 2026](https://www.tagesspiegel.de/berlin/technik-sollte-auffallige-verhaltensmuster-erkennen-videouberwachung-per-ki-am-berliner-abgeordnetenhaus-ist-vom-tisch-15378561.html) |
 | What the building pilots detect: entering closed areas, crossing virtual lines, climbing fences or walls, vandalism and abandoned objects | Confirmed | Drucksache 19/26970, answer to Q6 |
 | Cameras at Südkreuz station tagged `camera:features=facedetection` | Confirmed, but historical | [OpenStreetMap](https://www.openstreetmap.org/node/5570745329) (6 nodes); the trial ran 1 Aug 2017 – 31 Jul 2018 ([Bundestag hib 792/2018](https://www.bundestag.de/presse/hib/-/575144)) |
 
 What the sources do **not** settle yet: the exact day the Kottbusser Tor
 system goes live. After the press presentation on 28 October, dpa reports that
 live operation starts in early November with a four-week trial phase
-([dpa via Tagesspiegel, 28 Oct](https://www.tagesspiegel.de/berlin/dpa-polizeimassnahmen-ki-videouberwachung-am-kotti-startet-anfang-november-16209961.html); also
-[Berlin Spectator](https://berlinspectator.com/2026/10/29/ai-powered-cameras-at-kottbusser-tor-to-go-live-in-november/)); nd says the 30 cameras run permanently from
+([dpa via Tagesspiegel, 28 Oct](https://www.tagesspiegel.de/berlin/dpa-polizeimassnahmen-ki-videouberwachung-am-kotti-startet-anfang-november-16209961.html);
+[Berlin Spectator](https://berlinspectator.com/2026/10/29/ai-powered-cameras-at-kottbusser-tor-to-go-live-in-november/)),
+and the [Berliner Zeitung, 28 Oct](https://www.berliner-zeitung.de/article/ki-kameras-am-kottbusser-tor-polizei-startet-probebetrieb-10539955) puts the start in the week of
+2 November; nd says the 30 cameras run permanently from
 November ([nd, 28 Oct](https://www.nd-aktuell.de/artikel/1203508.ueberwachung-ki-am-kotti-kamera-laeuft.html)),
 and taz says go-live is due the week after
 ([taz, 28 Oct](https://taz.de/KI-Videoueberwachung-in-Kreuzberg/!6225655/)). dpa
-gives 30 days of storage where nd says up to 28.
+and BERLINboxx give 30 days of storage where nd says up to 28.
 The police FAQ's status graphic shows the test phase and says
 nothing is detected or reported yet. A
 [netzpolitik.org commentary of 23 Oct](https://netzpolitik.org/2026/koalitionsverhandlungen-in-berlin-rot-rot-gruen-muss-ki-kameras-stoppen/)
@@ -280,9 +283,8 @@ claims the software has been evaluating people's behaviour there since
 6 October. For the other sites, dpa names Warschauer Brücke as next and Alexanderplatz and
 Görlitzer Park "later", and Spranger says "there is no timetable" (taz),
 which sits uneasily with the Senate's September dates above; the table
-keeps the written answer. Also open is taz's March report of mobile cameras
-outside the Abgeordnetenhaus, which the Senate's September answer does not
-list. The app leaves the open points out until a source confirms them.
+keeps the written answer. The app leaves the open points out until a source
+confirms them.
 
 ---
 
