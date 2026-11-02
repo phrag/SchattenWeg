@@ -239,7 +239,7 @@ All of these are shown inside the app, on purpose.
 ## Where the AI-camera facts come from
 
 The AI-video zone cards and the AI-camera dots rest on public sources, not
-guesswork. Each claim below was last checked on **1 November 2026**. The zone
+guesswork. Each claim below was last checked on **2 November 2026**. The zone
 table itself lives in [`core/src/zones.rs`](core/src/zones.rs); update it and
 this list together.
 
@@ -247,7 +247,8 @@ this list together.
 |-------|--------|--------|
 | Police AI video ("KI-gestützter Videoschutz") starts at Kottbusser Tor; configuration of the cameras began 24 Sep 2026, takes about four weeks, then a test phase follows; the FAQ's status graphic now reads "Phase 3 Testphase umgesetzt" (28 Oct 2026) | Confirmed | [Polizei Berlin press release No. 1252, 24 Sep 2026](https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1718008.php); [FAQ](https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php) |
 | Not issuing alerts yet: during configuration and testing the system detects and reports nothing, and is not yet running 24/7 | Confirmed | [Polizei Berlin FAQ on KI-gestützter Videoschutz](https://www.berlin.de/polizei/polizeimeldungen/fakten-hintergruende/artikel.1694896.php) |
-| Software has been evaluating people's behaviour at Kottbusser Tor since 6 Oct 2026 | Press claim (commentary), unconfirmed; the police FAQ says nothing is detected or reported during the test phase | [netzpolitik.org, 23 Oct 2026](https://netzpolitik.org/2026/koalitionsverhandlungen-in-berlin-rot-rot-gruen-muss-ki-kameras-stoppen/) |
+| The behaviour scanner at Kottbusser Tor has run since 28 Oct 2026, the day after the opening ceremony ("scharf gestellt") | Press report, not confirmed by the police (their FAQ still shows the test phase, no alerts, no 24/7 operation; dpa and the Berliner Zeitung describe a four-week trial from early November); netzpolitik's earlier "since 6 Oct" claim is superseded | [netzpolitik.org, 31 Oct 2026](https://netzpolitik.org/2026/verhaltensscanner-in-berlin-kreisverkehr-der-kontrolle/) |
+| The system keeps being trained on the movement patterns of the people it films, once staff confirm or dismiss an alert (a Staige spokesperson); the signs do not say so; a Dec 2025 data-protection exception in the police law allows it | Confirmed (vendor spokesperson via press) | [netzpolitik.org, 31 Oct 2026](https://netzpolitik.org/2026/verhaltensscanner-in-berlin-kreisverkehr-der-kontrolle/) |
 | About 30 cameras at Kottbusser Tor, at 15 locations | Confirmed (police figure via press; nd and [dpa/Tagesspiegel](https://www.tagesspiegel.de/berlin/dpa-polizeimassnahmen-ki-videouberwachung-am-kotti-startet-anfang-november-16209961.html) say 30, dpa adds 15 locations) | [netzpolitik.org, 23 Aug 2026](https://netzpolitik.org/2026/verhaltensscanner-in-berlin-jetzt-beginnt-die-automatisierte-ueberwachung/), quoting Polizei Berlin; the police's own pages give no number |
 | All 30 are mapped in OpenStreetMap (`camera:features=artificial intelligence`, `operator=Polizei Berlin`) | Confirmed (counted in the OSM API) | [OpenStreetMap, Kottbusser Tor](https://www.openstreetmap.org/#map=19/52.4990/13.4178) |
 | Warschauer Brücke: planned by the end of 2026, no firm date | Confirmed | [Senate answer, Drucksache 19/26970, 6 Sep 2026](https://pardok.parlament-berlin.de/starweb/adis/citat/VT/19/SchrAnfr/S19-26970.pdf), answer to Q1 |
@@ -276,15 +277,15 @@ November ([nd, 28 Oct](https://www.nd-aktuell.de/artikel/1203508.ueberwachung-ki
 and taz says go-live is due the week after
 ([taz, 28 Oct](https://taz.de/KI-Videoueberwachung-in-Kreuzberg/!6225655/)). dpa
 and BERLINboxx give 30 days of storage where nd says up to 28.
-The police FAQ's status graphic shows the test phase and says
-nothing is detected or reported yet. A
-[netzpolitik.org commentary of 23 Oct](https://netzpolitik.org/2026/koalitionsverhandlungen-in-berlin-rot-rot-gruen-muss-ki-kameras-stoppen/)
-claims the software has been evaluating people's behaviour there since
-6 October. For the other sites, dpa names Warschauer Brücke as next and Alexanderplatz and
-Görlitzer Park "later", and Spranger says "there is no timetable" (taz),
-which sits uneasily with the Senate's September dates above; the table
-keeps the written answer. The app leaves the open points out until a source
-confirms them.
+The police FAQ's status graphic shows the test phase and says nothing is
+detected or reported yet, while [netzpolitik.org, 31 Oct](https://netzpolitik.org/2026/verhaltensscanner-in-berlin-kreisverkehr-der-kontrolle/) says the
+scanner has been armed since 28 October. For the other sites, netzpolitik
+quotes Spranger as saying Warschauer Brücke, Rotes Rathaus, the interior
+administration and the Jüdisches Museum still come in 2026, and Alexanderplatz
+and Görlitzer Park in 2027; dpa says "later" and taz quotes "there is no
+timetable". The 2026 date for the building pilots contradicts the Senate's
+written answer (test phase Q2 2027), so the table keeps the written answer. The
+app leaves the open points out until a source confirms them.
 
 ---
 
