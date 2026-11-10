@@ -82,7 +82,20 @@ self-defeating.** So everything sensitive is on-device.
   Play Services and beacons). **Offline bundled Berlin vector tiles** — no tile
   server sees the viewport.
 - **Positioning via platform `LocationManager` (GNSS)** — **never** the Fused
-  Location Provider (routes through Google).
+  Location Provider (routes through Google). **Opt-in and one-shot** (`GpsFix.kt`):
+  the ◎ button in the right-hand control column is the only place the
+  permission is requested (never at launch). `GPS_PROVIDER` only — not
+  `NETWORK_PROVIDER` (Wi-Fi/cell lookups can go through a vendor server).
+  `getCurrentLocation` on API 30+, a single-fix listener on API 29, 30 s
+  timeout, cancelled on `ON_STOP`; no tracking, no background location, no
+  foreground service. Precise is required: approximate-only gets an
+  explanation, not a fuzzy dot. A fix outside the Berlin bbox is discarded
+  with "only covers Berlin". The dot is our own GeoJSON layer (MapLibre's
+  `LocationComponent`/`LocationEngine` stay unused). Actions: centre on it,
+  and "Start route here" (sets `start`). The position lives in
+  `RouteViewModel` memory only — **never persisted or logged**; "Hide"
+  forgets it. Don't log coordinates anywhere (taps included); release builds
+  also strip `Log.d`/`Log.v` (`proguard-rules.pro`).
 - **No Google Play Services / Firebase / analytics.** GrapheneOS is a
   first-class target. A Play Services fallback was explicitly deferred.
 - **All map data bundled in the APK** (pre-filtered snapshot); the app declares
@@ -146,10 +159,13 @@ self-defeating.** So everything sensitive is on-device.
 ### Security decisions (see SECURITY.md for the full threat model)
 
 - MapLibre's library manifest brings `INTERNET`, `ACCESS_WIFI_STATE`,
-  `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION`. All four are **stripped
-  in the merge** (`tools:node="remove"`); only `ACCESS_NETWORK_STATE` stays,
+  `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION`. `INTERNET` and Wi-Fi
+  state are **stripped in the merge** (`tools:node="remove"`), as is
+  `ACCESS_BACKGROUND_LOCATION` defensively. `ACCESS_NETWORK_STATE` stays,
   because MapLibre's `ConnectivityReceiver` calls `ConnectivityManager` and
-  would otherwise throw. Verified against the 13.6.0 AAR: no `WifiManager`
+  would otherwise throw. The two foreground location permissions are declared
+  by **our** manifest for the opt-in GPS button (§3 positioning), and the CI
+  "Check APK permissions" gate allows exactly those three. Verified against the 13.6.0 AAR: no `WifiManager`
   use, and no telemetry/analytics classes at all.
 - `allowBackup=false`, cleartext traffic disabled, only the launcher activity
   exported, R8 + resource shrinking on release with keep rules for JNA/UniFFI.
@@ -459,7 +475,8 @@ hardware blocker. Bump `versionName` and `versionCode`
 `CHANGELOG.md`: the tag run puts it at the top of the release notes. The user
 pushes the tag themselves; tag pushes from a cloud session are usually blocked.
 
-**Deliberately deferred:** cycling profile, location puck ("centre on me"),
-camera FOV tuning against ground truth, Play Services fallback build.
+**Deliberately deferred:** cycling profile, continuous location tracking /
+follow-me (the opt-in one-shot GPS fix is done — see §3), camera FOV tuning
+against ground truth, Play Services fallback build.
 (On-device place search — `Router::search_places`, `core/src/places.rs` — is
 **done** and wired into the UI, so it is no longer on this list.)

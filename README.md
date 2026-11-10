@@ -191,15 +191,17 @@ This is the whole point of the app, so it's worth being explicit.
   talked to a server would defeat its own purpose.
 - **Fully offline.** The Berlin map, camera data, place-search index and the
   routing engine are all bundled in the app and run locally.
-- **Your location stays on the device.** The app holds no location permission
-  at all (there's no "centre on me" yet — you pick start and destination on the
-  map). If positioning is ever added it will use the platform's own GPS
-  (`LocationManager`), never Google's Fused Location Provider, which routes
-  through Google's servers.
+- **Your location is optional and stays on the device.** You can always pick
+  start and destination on the map. The ◎ button can also find you by GPS;
+  only then does Android ask for location access (never at launch). It uses
+  the phone's own GPS receiver (`LocationManager`) — never Wi-Fi/mobile-network
+  location and never Google's Fused Location Provider, which routes through
+  Google's servers — takes one fix while the app is open (no background
+  location, no tracking), and never saves or logs it.
 - **No Google, no Firebase, no analytics, no ad SDKs.** The map is drawn with
   MapLibre from bundled vector tiles, not the Google Maps SDK, so no tile server
   ever sees where you're looking. (The MapLibre library was audited: no
-  telemetry classes, and its bundled `INTERNET`/Wi‑Fi/location permissions are
+  telemetry classes, and its bundled `INTERNET`/Wi‑Fi permissions are
   stripped out during the build.)
 - **Nothing is backed up off-device.** Android cloud backup is disabled for the
   app.
