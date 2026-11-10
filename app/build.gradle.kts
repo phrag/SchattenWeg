@@ -105,6 +105,12 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        // JVM unit tests run against a stub android.jar; android.util.Log and
+        // friends then return defaults instead of throwing "Stub!".
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 // Name the outputs after the app, not the Gradle module. Without this the APK
@@ -126,6 +132,10 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
+    // SavedStateHandle: the dropped A/B points survive process death.
+    implementation(libs.lifecycle.viewmodel.savedstate)
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     // MapLibre 13.x renders with Vulkan by default. Emulators frequently have
     // no usable Vulkan driver and then draw *nothing* -- no basemap and no
     // overlays either, which looks identical to a data problem. Build with
