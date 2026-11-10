@@ -15,6 +15,7 @@ does about that, and what it deliberately does not promise.
 | A backend operator (including us) | There is no backend. Routing, scoring and map rendering are entirely on-device. We never learn a start, a destination, or that you opened the app. |
 | Tile provider correlating viewports | Basemap tiles are bundled offline; no tile server sees where you pan. |
 | Google / Play Services telemetry | No Play Services, no Firebase, no analytics, no crash reporter. The MapLibre AAR was audited: it contains no telemetry or analytics classes. |
+| Location leaking through positioning | Location is opt-in: the permission is requested only from the my-location button, never at launch, and the app works fully without it. Only `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION` are declared — no `ACCESS_BACKGROUND_LOCATION`, no foreground service. The fix comes from `LocationManager.GPS_PROVIDER` alone: not `NETWORK_PROVIDER` (Wi-Fi/cell positioning may query a vendor server) and not Google's Fused Location Provider. One fix per tap, cancelled when the app leaves the foreground; held in memory only, never written to disk or logged (release builds strip `Log.d`/`Log.v`), and discarded outside Berlin. With no `INTERNET` permission it could not be sent anywhere anyway. |
 | Another app on the device | The only exported activity is the launcher. The APK also carries two AndroidX components: `InitializationProvider` (not exported) and `ProfileInstallReceiver` (exported, but only the system shell holding the `DUMP` permission can trigger it). No other providers, services or receivers. Map data lives in app-private `filesDir`. |
 | Someone with the unlocked device | Out of scope — see below. |
 | Someone extracting a cloud or ADB backup | `android:allowBackup="false"`; the app's data is excluded from cloud backup and from `adb backup`. (On Android 12+ this flag does not govern device-to-device transfer, which is controlled by `dataExtractionRules`; the app does not set them.) |
@@ -29,6 +30,12 @@ does about that, and what it deliberately does not promise.
 - **Coverage is partial.** OpenStreetMap has a fraction of the real cameras.
   An unmarked street is not a safe street. Both caveats are on screen in the
   app on purpose, and must stay there.
+- **What the OS does around a GPS fix.** Receiving GPS is passive, but the
+  operating system may fetch assistance data (A-GPS/SUPL, often from the
+  carrier or Google on stock Android) to speed up a fix, and records that the
+  app used location in its privacy dashboard. That is outside the app's
+  control; GrapheneOS lets you route or disable SUPL. Not tapping the
+  my-location button avoids all of it.
 - **Device compromise.** A rooted/malware-infected device, or an unlocked
   phone in someone else's hands, defeats everything here. Use full-disk
   encryption and a strong lockscreen.

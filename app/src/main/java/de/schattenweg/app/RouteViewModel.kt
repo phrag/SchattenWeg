@@ -1,13 +1,16 @@
 package de.schattenweg.app
 
 import android.app.Application
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -256,14 +259,106 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 near to outlines
             }
-            Log.d(
-                TAG,
-                "cameras within ${radiusM.toInt()} m of " +
-                    "${centre.lat},${centre.lon}: ${found.size}",
-            )
             cameras.value = found
             coverage.value = shapes
         }
+    }
+
+    /**
+     * The user's own position, only ever asked for from the "my location"
+     * button. It lives in memory only: never written to disk, never logged,
+     * gone when the process dies or the user hides it.
+     */
+    private val _location = MutableStateFlow<LocationState>(LocationState.Idle)
+    val location: StateFlow<LocationState> = _location.asStateFlow()
+
+    /** One-shot "move the map here" requests: a fresh fix inside Berlin. */
+    private val _centreOn = MutableSharedFlow<LatLon>(extraBufferCapacity = 1)
+    val centreOn: SharedFlow<LatLon> = _centreOn.asSharedFlow()
+
+    private var locateJob: Job? = null
+
+    /**
+     * Ask GPS for one fix. The caller has already checked the precise-location
+     * permission. A fix outside Berlin is dropped on the spot, not shown.
+     */
+    fun locate() {
+        locateJob?.cancel()
+        _location.value = LocationState.Locating
+        locateJob = viewModelScope.launch {
+            val outcome = GpsFix.current(getApplication(), LOCATE_TIMEOUT_MS)
+            _location.value = when (outcome) {
+                is GpsFix.Outcome.Fix -> {
+                    val point = LatLon(outcome.lat, outcome.lon)
+                    if (inBerlin(point)) {
+                        _centreOn.tryEmit(point)
+                        LocationState.Fixed(point, outcome.accuracyM)
+                    } else {
+                        LocationState.Problem(
+                            "You are outside Berlin. SchattenWeg only covers Berlin, " +
+                                "so it cannot place you on its map.",
+                        )
+                    }
+                }
+
+                GpsFix.Outcome.NoGps -> LocationState.Problem(
+                    "This device has no GPS receiver. SchattenWeg uses GPS only, " +
+                        "never Wi-Fi or mobile-network location.",
+                )
+
+                GpsFix.Outcome.LocationOff -> LocationState.Problem(
+                    "Location is switched off in system settings.",
+                    LocationState.Settings.LOCATION,
+                )
+
+                GpsFix.Outcome.NoPermission -> LocationState.Problem(
+                    "Precise location is not allowed.",
+                    LocationState.Settings.APP,
+                )
+
+                GpsFix.Outcome.TimedOut -> LocationState.Problem(
+                    "No GPS fix within ${LOCATE_TIMEOUT_MS / 1000} s. GPS works best " +
+                        "outdoors with a clear view of the sky.",
+                )
+            }
+        }
+    }
+
+    /** Stop an in-flight fix (button tapped again, or the app was left). */
+    fun cancelLocate() {
+        if (locateJob?.isActive == true) {
+            locateJob?.cancel()
+            _location.value = LocationState.Idle
+        }
+    }
+
+    /** Forget the position (or the error) entirely. */
+    fun clearLocation() {
+        locateJob?.cancel()
+        _location.value = LocationState.Idle
+    }
+
+    /** Show a location problem found on the UI side (permission answers). */
+    fun reportLocationProblem(problem: LocationState.Problem) {
+        locateJob?.cancel()
+        _location.value = problem
+    }
+
+    /** Use the current GPS fix as the route start; re-plans if a destination exists. */
+    fun startFromPosition() {
+        val fix = _location.value as? LocationState.Fixed ?: return
+        setStart(fix.point)
+    }
+
+    sealed interface LocationState {
+        data object Idle : LocationState
+        data object Locating : LocationState
+        data class Fixed(val point: LatLon, val accuracyM: Float?) : LocationState
+        data class Problem(val message: String, val settings: Settings? = null) :
+            LocationState
+
+        /** Which system screen can fix a [Problem]. */
+        enum class Settings { APP, LOCATION }
     }
 
     /**
@@ -338,4 +433,15 @@ enum class AvoidanceLevel(val label: String, val lambda: Double) {
     HIGH("High", 6.0),
 }
 
-private const val TAG = "SchattenWeg"
+/**
+ * How long to wait for a GPS fix. A cold start outdoors usually lands well
+ * inside this; indoors it may never come, so give up and say why.
+ */
+private const val LOCATE_TIMEOUT_MS = 30_000L
+
+/**
+ * The area the bundled data covers (the bbox `scripts/fetch_cameras.sh`
+ * queries). A fix outside it cannot be routed from, so it is not shown.
+ */
+private fun inBerlin(p: LatLon) =
+    p.lat in 52.3383..52.6755 && p.lon in 13.0884..13.7612

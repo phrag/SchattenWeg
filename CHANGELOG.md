@@ -4,6 +4,19 @@ Each `## <version>` section is used as the top of that release's notes by
 `.github/workflows/release.yml` (the tag `v0.2.2` picks up `## 0.2.2`).
 Add the section before pushing the tag.
 
+## Unreleased
+
+- **Optional GPS position.** A new ◎ button in the right-hand controls finds
+  you with the phone's GPS and centres the map; "Start route here" uses it as
+  the start. Nothing is asked at launch: the location permission is requested
+  only when you tap the button, precise location is required (approximate
+  can't place you on a street), and outside Berlin it says the app only
+  covers Berlin. GPS only — never Wi-Fi/mobile-network location or Google's
+  location service — one fix at a time, only while the app is open, never
+  saved or logged. "Hide" forgets it.
+- Release builds no longer write debug log lines, and no build logs tapped
+  coordinates.
+
 ## 0.2.4
 
 - **Camera range is now labelled as an assumption, and two Axis models use their datasheets.** The card says the range is roughly face-recognition distance. Cameras tagged AXIS Q3839-PVE (180° panorama, 35 m) or Q1809-LE (90°, 60 m) use those figures instead of the generic 20–30 m and 60° cone; this changes routes around Kottbusser Tor.
