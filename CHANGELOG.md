@@ -4,6 +4,20 @@ Each `## <version>` section is used as the top of that release's notes by
 `.github/workflows/release.yml` (the tag `v0.2.2` picks up `## 0.2.2`).
 Add the section before pushing the tag.
 
+## Unreleased
+
+- **No more crash when the phone is short of storage.** The first launch unpacks
+  about 200 MB of map data; if it doesn't fit, the app now says how much space
+  it needs instead of closing, and cleans up the partial copy.
+- **A routing failure inside the core no longer closes the app.** Planning,
+  the camera layer and search now report the error and keep running.
+- **Switching Low → High quickly always shows the High route.** A slower,
+  older plan can no longer land last and replace the one you picked.
+- **Your start and destination survive Android closing the app in the
+  background**, and are re-planned when you come back. Points tapped while the
+  map data was still loading are routed as soon as it is ready.
+- Map label fonts are unpacked once per install instead of on every launch.
+
 ## 0.2.4
 
 - **Camera range is now labelled as an assumption, and two Axis models use their datasheets.** The card says the range is roughly face-recognition distance. Cameras tagged AXIS Q3839-PVE (180° panorama, 35 m) or Q1809-LE (90°, 60 m) use those figures instead of the generic 20–30 m and 60° cone; this changes routes around Kottbusser Tor.

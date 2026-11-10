@@ -3,9 +3,12 @@ package de.schattenweg.app
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +23,8 @@ import uniffi.schattenweg_core.Place
 import uniffi.schattenweg_core.Route
 import uniffi.schattenweg_core.RouteException
 import uniffi.schattenweg_core.Router
+import uniffi.schattenweg_core.RouterInterface
+import java.io.File
 
 /**
  * Owns the [Router] (the Rust core) and exposes route-planning state to the UI.
@@ -27,10 +32,43 @@ import uniffi.schattenweg_core.Router
  * Everything that touches the core runs off the main thread. The core is
  * immutable after construction, so a single instance is shared for the app's
  * lifetime.
+ *
+ * Every call into the core is guarded: besides [RouteException], a Rust panic
+ * surfaces as UniFFI's `InternalException`, and an uncaught exception in
+ * [viewModelScope] kills the process. A failed call shows an error instead.
  */
-class RouteViewModel(application: Application) : AndroidViewModel(application) {
+class RouteViewModel(
+    application: Application,
+    private val saved: SavedStateHandle,
+) : AndroidViewModel(application) {
 
-    private var router: Router? = null
+    private var router: RouterInterface? = null
+
+    /**
+     * Seams for unit tests (`RouteViewModelTest`): the real app copies the
+     * bundled assets out and opens the native core; tests substitute fakes so
+     * the ViewModel's rules run on the JVM without Android or the Rust library.
+     */
+    internal var provisionAssets: () -> MapAssets.Provisioned =
+        { MapAssets.ensure(getApplication<Application>()) }
+    internal var openRouter: (pbf: File?, cache: File) -> RouterInterface = { pbf, cache ->
+        if (pbf != null) {
+            // Only an extract was bundled: open() reuses a valid cached scored
+            // graph, and otherwise scores one from the extract and writes it
+            // for next time.
+            Router.open(pbf.absolutePath, cache.absolutePath)
+        } else {
+            // The normal build: the bundled cache is the routing data, and
+            // there is no extract to fall back to.
+            Router.openCache(cache.absolutePath)
+        }
+    }
+
+    /** The plan in flight; a newer request cancels it so a stale result can't win. */
+    private var planJob: Job? = null
+
+    /** Same for the camera layer: only the latest viewport's answer is drawn. */
+    private var cameraJob: Job? = null
 
     /** Last region the map asked about, replayed when the router is ready. */
     private var lastCameraQuery: Pair<LatLon, Double>? = null
@@ -80,6 +118,25 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
     val searchQuery = MutableStateFlow("")
     val searchResults = MutableStateFlow<List<Place>>(emptyList())
 
+    init {
+        // Android may kill the process while the app is in the background; the
+        // ViewModel then starts empty. Bring back the dropped points and the
+        // level, and re-plan once the router is ready (see provision()). Only
+        // the user's own taps are kept, in the platform's per-task saved state,
+        // which never leaves the device and is discarded when the task ends.
+        start.value = saved.get<DoubleArray>(KEY_START)?.toLatLon()
+        end.value = saved.get<DoubleArray>(KEY_END)?.toLatLon()
+        saved.get<String>(KEY_LEVEL)
+            ?.let { name -> AvoidanceLevel.entries.firstOrNull { it.name == name } }
+            ?.let { level.value = it }
+        viewModelScope.launch { start.collect { saved[KEY_START] = it?.toArray() } }
+        viewModelScope.launch { end.collect { saved[KEY_END] = it?.toArray() } }
+        viewModelScope.launch { level.collect { saved[KEY_LEVEL] = it.name } }
+        // Once per ViewModel, not per provision(): a retried provision after a
+        // failure must not start a second collector.
+        startSearchCollector()
+    }
+
     /**
      * Copy the bundled map data out of the APK and build the Rust core from
      * it. Both steps are heavy — the snapshot is tens of megabytes and the
@@ -91,12 +148,26 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
         // change while this ViewModel (and any in-flight load) survives.
         if (router != null || provisioning) return
         provisioning = true
-        startSearchCollector()
         viewModelScope.launch {
             _state.value = UiState.Loading
 
-            val assets = withContext(Dispatchers.IO) {
-                MapAssets.ensure(getApplication<Application>())
+            val assets = try {
+                withContext(Dispatchers.IO) { provisionAssets() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Typically a full disk: ~200 MB is copied out on first launch.
+                // Leave the basemap blank, say why, and allow a retry the next
+                // time the activity is created.
+                Log.w(TAG, "map assets could not be provisioned", e)
+                basemapReady.value = true
+                provisioning = false
+                _state.value = UiState.Error(
+                    (e as? MapAssets.ProvisionException)?.message
+                        ?: "Could not unpack the map data. " +
+                        "Free up some storage and reopen the app.",
+                )
+                return@launch
             }
             mapAssets.value = assets
             basemapReady.value = true
@@ -111,18 +182,7 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _state.value = try {
-                val r = withContext(Dispatchers.Default) {
-                    if (pbf != null) {
-                        // Only an extract was bundled: open() reuses a valid
-                        // cached scored graph, and otherwise scores one from
-                        // the extract and writes it for next time.
-                        Router.open(pbf.absolutePath, cache.absolutePath)
-                    } else {
-                        // The normal build: the bundled cache is the routing
-                        // data, and there is no extract to fall back to.
-                        Router.openCache(cache.absolutePath)
-                    }
-                }
+                val r = withContext(Dispatchers.Default) { openRouter(pbf, cache) }
                 router = r
                 // The map almost certainly asked for cameras while this was
                 // still loading; answer that request now.
@@ -130,6 +190,8 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
                     refreshCameras(centre, radiusM)
                 }
                 UiState.Ready(cameraCount = r.cameraCount())
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Deliberately broad: this is the one place that feeds a whole
                 // file into the core. Besides RouteException, a malformed
@@ -141,6 +203,10 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
                         ?: "Could not load the map data",
                 )
             }
+            // Points restored after process death, or tapped while the router
+            // was still loading: plan them now, at the level that is showing
+            // (not reset to High: for a restored pair it is the same route).
+            if (router != null && start.value != null && end.value != null) plan()
         }
     }
 
@@ -217,17 +283,27 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
         val s = start.value ?: return
         val e = end.value ?: return
         if (freshPair) level.value = AvoidanceLevel.HIGH
-        viewModelScope.launch {
+        val lambda = level.value.lambda
+        // A quick Low → High flip starts two plans; without this the slower
+        // one could land last and show the route for the level not selected.
+        // (The native call itself runs to completion; its result is dropped.)
+        planJob?.cancel()
+        planJob = viewModelScope.launch {
             _state.value = UiState.Planning
             _state.value = try {
-                val planned = withContext(Dispatchers.Default) {
-                    r.plan(s, e, level.value.lambda)
-                }
+                val planned = withContext(Dispatchers.Default) { r.plan(s, e, lambda) }
                 route.value = planned
                 UiState.Routed(planned)
+            } catch (ex: CancellationException) {
+                throw ex
             } catch (ex: RouteException) {
                 route.value = null
                 UiState.Error(ex.explain())
+            } catch (ex: Exception) {
+                // A Rust panic (UniFFI InternalException): report, don't crash.
+                Log.e(TAG, "route planning failed", ex)
+                route.value = null
+                UiState.Error("Route planning failed. Try other points.")
             }
         }
     }
@@ -244,17 +320,26 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshCameras(centre: LatLon, radiusM: Double) {
         lastCameraQuery = centre to radiusM
         val r = router ?: return
-        viewModelScope.launch {
-            val (found, shapes) = withContext(Dispatchers.Default) {
-                val near = r.camerasNear(centre, radiusM)
-                // Past the draw cap the outlines are never shown, so don't
-                // spend the ray-casting on them.
-                val outlines = if (near.size <= MAX_COVERAGE_FEATURES) {
-                    r.coverageNear(centre, radiusM)
-                } else {
-                    emptyList()
+        cameraJob?.cancel()
+        cameraJob = viewModelScope.launch {
+            val (found, shapes) = try {
+                withContext(Dispatchers.Default) {
+                    val near = r.camerasNear(centre, radiusM)
+                    // Past the draw cap the outlines are never shown, so don't
+                    // spend the ray-casting on them.
+                    val outlines = if (near.size <= MAX_COVERAGE_FEATURES) {
+                        r.coverageNear(centre, radiusM)
+                    } else {
+                        emptyList()
+                    }
+                    near to outlines
                 }
-                near to outlines
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Keep the layer as it was; the next pan asks again.
+                Log.e(TAG, "camera query failed", e)
+                return@launch
             }
             Log.d(
                 TAG,
@@ -283,8 +368,15 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
                         searchResults.value = emptyList()
                         return@collect
                     }
-                    searchResults.value = withContext(Dispatchers.Default) {
-                        r.searchPlaces(q, 8u)
+                    searchResults.value = try {
+                        withContext(Dispatchers.Default) { r.searchPlaces(q, 8u) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // An exception here would end the collector, and search
+                        // would silently stop working for the rest of the session.
+                        Log.e(TAG, "place search failed", e)
+                        emptyList()
                     }
                 }
         }
@@ -310,7 +402,7 @@ class RouteViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         // Router holds native memory; close it so UniFFI frees it promptly.
-        router?.close()
+        (router as? AutoCloseable)?.close()
         router = null
         super.onCleared()
     }
@@ -339,3 +431,11 @@ enum class AvoidanceLevel(val label: String, val lambda: Double) {
 }
 
 private const val TAG = "SchattenWeg"
+
+private const val KEY_START = "start"
+private const val KEY_END = "end"
+private const val KEY_LEVEL = "level"
+
+private fun LatLon.toArray() = doubleArrayOf(lat, lon)
+
+private fun DoubleArray.toLatLon(): LatLon? = if (size == 2) LatLon(this[0], this[1]) else null
