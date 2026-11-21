@@ -1,8 +1,10 @@
 package de.schattenweg.app
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.time.LocalDate
 
 /**
@@ -50,9 +52,29 @@ object MapAssets {
     private const val DATA_INFO_ASSET = "data-info.txt"
     private const val GLYPHS_ASSET = "glyphs"
 
+    /**
+     * Copying the bundled data out failed, almost always for lack of storage
+     * (the cache and tiles are ~200 MB together). [message] is user-facing.
+     */
+    class ProvisionException(message: String, cause: Throwable? = null) :
+        IOException(message, cause)
+
+    private const val TAG = "SchattenWeg"
+
+    /** Headroom kept free beyond the file itself, so the phone isn't left at 0 bytes. */
+    private const val FREE_SPACE_MARGIN = 32L * 1024 * 1024
+
+    /**
+     * @throws ProvisionException when a file cannot be copied out (typically a
+     *   full disk). Partial copies are removed, so the next launch starts clean.
+     */
     fun ensure(context: Context): Provisioned {
         val bundled = context.assets.list(ASSET_DIR)?.toSet() ?: emptySet()
         val outDir = File(context.filesDir, "map").apply { mkdirs() }
+        // A copy killed mid-way (process death, full disk) leaves a .part
+        // behind; it is never read, so reclaim the space before copying again.
+        outDir.listFiles { f -> f.name.endsWith(".part") }?.forEach { it.deleteRecursively() }
+        val install = installStamp(context)
         val routingPbf = copyIfBundled(context, bundled, ROUTING_ASSET, outDir)
         if (routingPbf == null) {
             // Installs before the extract left the APK extracted it to filesDir.
@@ -67,7 +89,7 @@ object MapAssets {
                 ?: routingPbf?.let { File(outDir, ROUTING_CACHE) },
             pmtiles = copyIfBundled(context, bundled, TILES_ASSET, outDir),
             glyphsDir = if (GLYPHS_ASSET in bundled) {
-                copyTree(context, "$ASSET_DIR/$GLYPHS_ASSET", File(outDir, GLYPHS_ASSET))
+                provisionGlyphs(context, outDir, install)
             } else {
                 null
             },
@@ -75,26 +97,51 @@ object MapAssets {
     }
 
     /**
-     * Recursively copy an asset subtree to [dest]. Glyphs are hundreds of
-     * small .pbf files, not one big one, so this walks the tree; the count is
-     * used as a cheap "already unpacked" check to avoid recopying every launch.
+     * Unpack the label glyphs (hundreds of small .pbf files) once per install.
+     *
+     * Same stamp rule as the compressed graph cache: the tree is copied into a
+     * `.part` directory, renamed into place, and only then stamped, so a copy
+     * that didn't finish is never mistaken for a complete one. Labels are not
+     * essential, so a failure returns null (the style then drops its label
+     * layers) instead of stopping the app.
      */
-    private fun copyTree(context: Context, assetPath: String, dest: File): File? {
-        val children = runCatching { context.assets.list(assetPath) }.getOrNull()
+    private fun provisionGlyphs(context: Context, outDir: File, install: String?): File? {
+        val dest = File(outDir, GLYPHS_ASSET)
+        val stamp = File(outDir, "$GLYPHS_ASSET.stamp")
+        if (install != null && dest.isDirectory &&
+            runCatching { stamp.readText() }.getOrNull() == install
+        ) {
+            return dest
+        }
+        stamp.delete()
+        val tmp = File(outDir, "$GLYPHS_ASSET.part")
+        return try {
+            tmp.deleteRecursively()
+            copyTree(context, "$ASSET_DIR/$GLYPHS_ASSET", tmp)
+            dest.deleteRecursively()
+            if (!tmp.renameTo(dest)) throw IOException("could not move glyphs into place")
+            if (install != null) runCatching { stamp.writeText(install) }
+            dest
+        } catch (e: IOException) {
+            Log.w(TAG, "label glyphs not unpacked; map labels disabled", e)
+            tmp.deleteRecursively()
+            null
+        }
+    }
+
+    /** Recursively copy an asset subtree to [dest]; throws on any failed file. */
+    private fun copyTree(context: Context, assetPath: String, dest: File) {
+        val children = context.assets.list(assetPath)
         if (children.isNullOrEmpty()) {
-            // A leaf: copy the file itself.
-            return runCatching {
-                context.assets.open(assetPath).use { input ->
-                    dest.outputStream().use { input.copyTo(it) }
-                }
-                dest
-            }.getOrNull()
+            context.assets.open(assetPath).use { input ->
+                dest.outputStream().use { input.copyTo(it) }
+            }
+            return
         }
         dest.mkdirs()
         for (child in children) {
             copyTree(context, "$assetPath/$child", File(dest, child))
         }
-        return dest
     }
 
     private fun copyIfBundled(
@@ -133,9 +180,23 @@ object MapAssets {
             // Copy to a temporary file first: an interrupted copy must not
             // leave a truncated file that looks complete on the next launch.
             stamp.delete()
+            // The stale copy is about to be replaced; count its space as free.
+            val reclaimable = if (out.exists()) out.length() else 0L
+            if (assetSize != null &&
+                outDir.usableSpace + reclaimable < assetSize + FREE_SPACE_MARGIN
+            ) {
+                throw ProvisionException(notEnoughSpace(assetSize))
+            }
             val tmp = File(outDir, "$name.part")
-            context.assets.open("$ASSET_DIR/$name").use { input ->
-                tmp.outputStream().use { input.copyTo(it) }
+            try {
+                context.assets.open("$ASSET_DIR/$name").use { input ->
+                    tmp.outputStream().use { input.copyTo(it) }
+                }
+            } catch (e: IOException) {
+                tmp.delete()
+                // A compressed entry's size is unknown up front, so a full
+                // disk shows up here instead of in the check above.
+                throw ProvisionException(notEnoughSpace(assetSize), e)
             }
             if (!tmp.renameTo(out)) {
                 tmp.delete()
@@ -165,6 +226,12 @@ object MapAssets {
                 ?.let { LocalDate.parse(it) }
         }
     }.getOrNull()
+
+    private fun notEnoughSpace(bytes: Long?): String {
+        val need = bytes?.let { " (about ${(it + FREE_SPACE_MARGIN) / (1024 * 1024)} MB)" } ?: ""
+        return "Not enough free storage to unpack the Berlin map data$need. " +
+            "Free up some space and reopen the app."
+    }
 
     /** Changes whenever the app is installed or updated; null if unreadable. */
     private fun installStamp(context: Context): String? = runCatching {

@@ -131,6 +131,13 @@ jobs:
       # one query) instead of the up-to-a-day-old extract, falling back to the
       # extract's own cameras if Overpass is down. Tagged releases (Stable) keep
       # the extract's data so they are reproducible.
+      #
+      # Geofabrik is the one outside dependency that has skipped a night: a
+      # refused connection (run #88) and a 404 on the .md5 right after the
+      # download (run #90). Both cleared on their own, so the step tries up to
+      # three times, a few minutes apart, before failing the build. REFRESH=1
+      # stays on for every attempt so a retry never trusts a half-fetched or
+      # corrupt extract left by the one before.
       - name: Build offline map assets (live cameras)
         env:
           REFRESH: "1"
@@ -139,7 +146,18 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_21_X64"
           export PATH="$JAVA_HOME/bin:$PATH"
           java -version
-          ./scripts/build_map_assets.sh
+          for attempt in 1 2 3; do
+            if ./scripts/build_map_assets.sh; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              wait_s=$((attempt * 120))
+              echo "::warning::Map asset build failed (attempt $attempt of 3); retrying in ${wait_s}s"
+              sleep "$wait_s"
+            fi
+          done
+          echo "::error::Map asset build failed after 3 attempts"
+          exit 1
 
       # Release signing. Tags and main MUST produce a release-key-signed APK:
       # the job fails rather than publishing a debug-signed "release". Other
