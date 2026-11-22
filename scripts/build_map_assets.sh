@@ -56,7 +56,18 @@ DATA="$ROOT/data"
 ASSETS="$ROOT/app/src/main/assets/map"
 mkdir -p "$DATA" "$ASSETS"
 
-GEOFABRIK="${EXTRACT_URL:-https://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf}"
+# Geofabrik moved the Berlin extract into its own folder (Nov 2026); the old
+# europe/germany/berlin-latest path now answers 301 to a URL that is itself a
+# 404, which is what broke the nightlies. The current path is the "pbf" URL in
+# https://download.geofabrik.de/index-v1-nogeom.json -- check there first if this
+# ever 404s again.
+GEOFABRIK="${EXTRACT_URL:-https://download.geofabrik.de/europe/germany/berlin/berlin-latest.osm.pbf}"
+# Used only when the primary source cannot be fetched (and EXTRACT_URL is not
+# set). BBBike publishes a "<md5>  Berlin.osm.pbf" file beside the extract, so
+# it is verified the same way. It is a rectangle around Berlin rather than the
+# Land Berlin polygon, so it also holds a margin of Brandenburg and is ~2.5x
+# bigger; that is harmless here because routing only snaps to nearby roads.
+FALLBACK_URL="${FALLBACK_URL:-https://download.bbbike.org/osm/bbbike/Berlin/Berlin.osm.pbf}"
 RAW="$DATA/berlin-latest.osm.pbf"
 ROUTING="$DATA/berlin-routing.osm.pbf"
 TILES="$DATA/berlin.pmtiles"
@@ -255,15 +266,28 @@ fi
 if [[ -f "$RAW" ]]; then
     echo "Using existing $RAW (pass REFRESH=1 to fetch the current extract)"
 else
-    fetch "$GEOFABRIK" "$RAW" "the Berlin OSM extract (~70 MB)"
+    # fetch() exits on failure, so try it in a subshell: if the primary host
+    # is down or the path moved, say so and use the verified fallback instead
+    # of failing the whole build.
+    if ! (fetch "$GEOFABRIK" "$RAW" "the Berlin OSM extract (~70 MB)"); then
+        if [[ -n "${EXTRACT_URL:-}" || -z "$FALLBACK_URL" ]]; then
+            exit 1
+        fi
+        echo "!! Primary extract source failed; falling back to" >&2
+        echo "   $FALLBACK_URL" >&2
+        GEOFABRIK="$FALLBACK_URL"
+        rm -f "$RAW" "$RAW.md5"
+        fetch "$GEOFABRIK" "$RAW" "the Berlin OSM extract (fallback mirror, ~180 MB)"
+    fi
 fi
 
-# Integrity: Geofabrik publishes an .md5 next to every extract. Verify the
-# download instead of trusting the pipe blindly.
+# Integrity: Geofabrik (and the BBBike fallback) publish an .md5 next to every
+# extract. Verify the download instead of trusting the pipe blindly. GEOFABRIK
+# holds whichever source was actually used.
 if [[ "${SKIP_CHECKSUM:-0}" == "1" ]]; then
     echo "!! SKIP_CHECKSUM=1 -- using $RAW UNVERIFIED."
 elif [[ -n "${EXTRACT_URL:-}" ]]; then
-    echo "Custom EXTRACT_URL set; skipping the Geofabrik checksum."
+    echo "Custom EXTRACT_URL set; skipping the checksum."
     echo "   Verify your source yourself -- see SECURITY.md."
 else
     md5file="$RAW.md5"

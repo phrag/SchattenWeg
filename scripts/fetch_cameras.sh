@@ -54,7 +54,7 @@ echo "Wrote $COUNT cameras → $OUT"
 # Download the Geofabrik Berlin extract and filter it with osmium:
 #
 #   curl -L -o data/berlin.osm.pbf \
-#     https://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf
+#     https://download.geofabrik.de/europe/germany/berlin/berlin-latest.osm.pbf
 #
 #   osmium tags-filter data/berlin.osm.pbf \
 #     n/man_made=surveillance -o data/berlin-cameras.osm.pbf
