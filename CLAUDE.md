@@ -42,7 +42,8 @@ Our ingest paths (see `scripts/` and `core/src/osm.rs`):
   build never breaks. `build-info.txt/json` report the real camera timestamp
   (`osm_snapshot`, `camera_data`), `camera_source` and `extract_snapshot`.
   Tagged (Stable) builds keep the extract's cameras.
-- **Shipped/offline:** Geofabrik `berlin-latest.osm.pbf`, filtered with `osmium`
+- **Shipped/offline:** Geofabrik `berlin-latest.osm.pbf` (path `europe/germany/berlin/`
+  since Nov 2026; BBBike's `.md5`-verified extract is the automatic fallback), filtered with `osmium`
   to streets + surveillance nodes (`scripts/build_map_assets.sh`), read
   on-device by the Rust core and bundled in the APK.
 
