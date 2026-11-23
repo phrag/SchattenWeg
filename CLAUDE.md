@@ -43,7 +43,8 @@ Our ingest paths (see `scripts/` and `core/src/osm.rs`):
   (`osm_snapshot`, `camera_data`), `camera_source` and `extract_snapshot`.
   Tagged (Stable) builds keep the extract's cameras.
 - **Shipped/offline:** Geofabrik `berlin-latest.osm.pbf` (path `europe/germany/berlin/`
-  since Nov 2026; BBBike's `.md5`-verified extract is the automatic fallback), filtered with `osmium`
+  since Nov 2026; BBBike's `.md5`-verified extract is the automatic fallback, clipped to
+  `scripts/berlin.poly` because BBBike's is a rectangle), filtered with `osmium`
   to streets + surveillance nodes (`scripts/build_map_assets.sh`), read
   on-device by the Rust core and bundled in the APK.
 
