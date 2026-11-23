@@ -1,0 +1,40 @@
+name: Probe clip
+
+on:
+  push:
+    branches: [claude/project-thread-t2o8ux]
+    paths: [.github/workflows/probe-clip.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install osmium
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+      - name: Unclipped bbbike, live cameras
+        env:
+          EXTRACT_URL: https://download.bbbike.org/osm/bbbike/Berlin/Berlin.osm.pbf
+          REFRESH: "1"
+          LIVE_CAMERAS: "1"
+          SKIP_TILES: "1"
+          SKIP_CACHE: "1"
+        run: |
+          ./scripts/build_map_assets.sh 2>&1 | grep -vE '^ *[0-9]+ +[0-9]+ ' | tail -40
+          echo '--- build-info (unclipped)'; cat data/build-info.txt
+          ls -l data/berlin-routing.osm.pbf
+      - name: Clipped bbbike, live cameras
+        env:
+          EXTRACT_URL: https://download.bbbike.org/osm/bbbike/Berlin/Berlin.osm.pbf
+          LIVE_CAMERAS: "1"
+          SKIP_TILES: "1"
+          SKIP_CACHE: "1"
+          CLIP_TO_BERLIN: "1"
+        run: |
+          ./scripts/build_map_assets.sh 2>&1 | grep -vE '^ *[0-9]+ +[0-9]+ ' | tail -40
+          echo '--- build-info (clipped)'; cat data/build-info.txt
+          ls -l data/berlin-routing.osm.pbf
+          osmium fileinfo -e data/berlin-routing.osm.pbf | grep -iE 'bbox|nodes|ways|relations'
