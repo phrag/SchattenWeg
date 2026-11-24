@@ -115,6 +115,10 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --no-daemon
 
+      # JVM unit tests for the ViewModel's rules (fake router, no device).
+      - name: Kotlin unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
       - name: Check for Google/Play Services dependencies
         run: |
           ./gradlew :app:dependencies --configuration debugRuntimeClasspath --no-daemon \

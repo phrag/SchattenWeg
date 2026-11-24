@@ -42,7 +42,9 @@ Our ingest paths (see `scripts/` and `core/src/osm.rs`):
   build never breaks. `build-info.txt/json` report the real camera timestamp
   (`osm_snapshot`, `camera_data`), `camera_source` and `extract_snapshot`.
   Tagged (Stable) builds keep the extract's cameras.
-- **Shipped/offline:** Geofabrik `berlin-latest.osm.pbf`, filtered with `osmium`
+- **Shipped/offline:** Geofabrik `berlin-latest.osm.pbf` (path `europe/germany/berlin/`
+  since Nov 2026; BBBike's `.md5`-verified extract is the automatic fallback, clipped to
+  `scripts/berlin.poly` because BBBike's is a rectangle), filtered with `osmium`
   to streets + surveillance nodes (`scripts/build_map_assets.sh`), read
   on-device by the Rust core and bundled in the APK.
 
@@ -389,7 +391,15 @@ Track progress against this list when picking the project back up:
 - [x] Android app: Gradle + cargo-ndk + UniFFI bindings + MapLibre map screen
       (offline tiles, camera layer, tap-to-route, Low/Medium/High avoidance
       control, in-app GitHub credit).
-- [x] CI: Rust fmt/clippy/test + Android assembleDebug + no-Play-Services gate.
+- [x] CI: Rust fmt/clippy/test + Android assembleDebug + Kotlin unit tests
+      (`app/src/test`, `RouteViewModelTest` against a fake `RouterInterface`
+      via the `provisionAssets`/`openRouter` seams) + no-Play-Services gate.
+- [x] App never crashes on a core error or a full disk: every core call in
+      `RouteViewModel` catches UniFFI's `InternalException` (a Rust panic) as
+      well as `RouteException`, and `MapAssets` throws `ProvisionException`
+      (shown to the user) instead of an uncaught `IOException`. Keep it that
+      way for any new core call. Newer `plan()`/camera requests cancel older
+      ones; A/B points and level live in `SavedStateHandle`.
 - [x] Release workflow (`.github/workflows/release.yml`): a version tag (or a
       manual run) generates the offline Berlin assets (`build_map_assets.sh` —
       needs osmium + Java 21 for Planetiler, so the job sets up both 17 and 21),
@@ -468,7 +478,8 @@ scores can't outlive the code that produced them.
 often rather than saving up: when a user-visible feature or fix has landed on
 `main` and CI is green, or several commits have accumulated since the last tag
 (`git log $(git describe --tags --abbrev=0)..origin/main`), say so and propose
-the next version. The app has now run on a real phone (see §7), so 1.0.0 is a
+the next version (`git describe --tags --abbrev=0 --exclude latest`: the
+rolling `latest` tag otherwise wins and the range comes out empty). The app has now run on a real phone (see §7), so 1.0.0 is a
 judgement call about breadth of testing (more devices), not a
 hardware blocker. Bump `versionName` and `versionCode`
 (never decrease the code) in `app/build.gradle.kts` before tagging. Also add a `## <version>` section to

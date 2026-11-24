@@ -98,7 +98,10 @@ any pushed key as burned.
 - CI fails the build if any Play Services / Firebase artifact appears in the
   dependency tree.
 - `scripts/build_map_assets.sh` verifies the Geofabrik download against the
-  published MD5 before using it. Two escape hatches deliberately weaken that
+  published MD5 before using it. If Geofabrik cannot be fetched it falls back
+  to BBBike's Berlin extract and verifies that against BBBike's own `.md5`
+  (both checksums come from the same host as the file, so they catch
+  corruption and truncation, not a compromised host). Two escape hatches deliberately weaken that
   and both say so loudly when used: `SKIP_CHECKSUM=1`, and `EXTRACT_URL=<url>`
   (a mirror has no Geofabrik checksum to compare against — verify such a
   source yourself).
