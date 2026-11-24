@@ -6,6 +6,16 @@ Add the section before pushing the tag.
 
 ## Unreleased
 
+- **Optional GPS position.** A new ◎ button in the right-hand controls finds
+  you with the phone's GPS and centres the map; "Start route here" uses it as
+  the start. Nothing is asked at launch: the location permission is requested
+  only when you tap the button, precise location is required (approximate
+  can't place you on a street), and outside Berlin it says the app only
+  covers Berlin. GPS only — never Wi-Fi/mobile-network location or Google's
+  location service — one fix at a time, only while the app is open, never
+  saved or logged. "Hide" forgets it.
+- Release builds no longer write debug log lines, and no build logs tapped
+  coordinates.
 - **No more crash when the phone is short of storage.** The first launch unpacks
   about 200 MB of map data; if it doesn't fit, the app now says how much space
   it needs instead of closing, and cleans up the partial copy.

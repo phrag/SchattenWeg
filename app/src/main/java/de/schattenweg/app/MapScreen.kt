@@ -1,13 +1,18 @@
 package de.schattenweg.app
 
+import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.graphics.RectF
 import android.net.Uri
+import android.provider.Settings
 import android.text.InputType
 import android.util.Log
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -98,6 +103,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import org.maplibre.android.geometry.LatLng as MlLatLng
@@ -163,6 +169,13 @@ private fun ZoneStatus.label() = when (this) {
 }
 private const val ENDPOINT_SOURCE = "sw-endpoints"
 
+/** The user's own GPS position (dot + accuracy circle), drawn on top of everything. */
+private const val POSITION_SOURCE = "sw-position"
+private const val POSITION_ACCURACY_SOURCE = "sw-position-accuracy"
+
+/** Zoom the map uses when centring on the user, unless already closer. */
+private const val POSITION_ZOOM = 16.0
+
 /** Berlin, Alexanderplatz — where the map opens. */
 private val BERLIN = LatLng(52.5216, 13.4127)
 
@@ -227,6 +240,7 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val basemapReady by viewModel.basemapReady.collectAsState()
+    val location by viewModel.location.collectAsState()
     val mapView = remember {
         MapLibre.getInstance(context)
         MapView(context)
@@ -261,7 +275,11 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
 
                 Lifecycle.Event.ON_PAUSE -> mapView.onPause()
 
-                Lifecycle.Event.ON_STOP -> mapView.onStop()
+                Lifecycle.Event.ON_STOP -> {
+                    mapView.onStop()
+                    // A GPS request never outlives the screen being visible.
+                    viewModel.cancelLocate()
+                }
 
                 // ON_DESTROY is deliberately not handled here: onDispose below
                 // owns teardown, so onDestroy is called exactly once.
@@ -316,6 +334,8 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     style.addSource(GeoJsonSource(ROUTE_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(CAMERA_SOURCE, EMPTY_COLLECTION))
                     style.addSource(GeoJsonSource(ENDPOINT_SOURCE, EMPTY_COLLECTION))
+                    style.addSource(GeoJsonSource(POSITION_ACCURACY_SOURCE, EMPTY_COLLECTION))
+                    style.addSource(GeoJsonSource(POSITION_SOURCE, EMPTY_COLLECTION))
 
                     // Where police AI video analysis runs or is announced.
                     // Violet, not the cameras' red, and drawn lowest: it is a
@@ -397,6 +417,23 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                             PropertyFactory.circleStrokeColor("#10141a"),
                         ),
                     )
+                    // The user's GPS position: our own layer, not MapLibre's
+                    // LocationComponent (which would want its own engine).
+                    style.addLayer(
+                        FillLayer("sw-position-accuracy", POSITION_ACCURACY_SOURCE)
+                            .withProperties(
+                                PropertyFactory.fillColor("#4da3ff"),
+                                PropertyFactory.fillOpacity(0.15f),
+                            ),
+                    )
+                    style.addLayer(
+                        CircleLayer("sw-position-dot", POSITION_SOURCE).withProperties(
+                            PropertyFactory.circleRadius(7f),
+                            PropertyFactory.circleColor("#4da3ff"),
+                            PropertyFactory.circleStrokeWidth(2.5f),
+                            PropertyFactory.circleStrokeColor("#f2f4f8"),
+                        ),
+                    )
 
                     // The style can finish before factory() has applied the
                     // camera, leaving the target null or at null island. Berlin
@@ -457,6 +494,34 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 routeSource?.setGeoJson(routeJson)
                 endpointSource?.setGeoJson(endpointJson)
             }
+        }
+
+        // The position dot, pushed the same way as the other overlays. The
+        // style's own sources start empty, so basemapReady re-pushes it if the
+        // style is rebuilt.
+        val fix = location as? RouteViewModel.LocationState.Fixed
+        LaunchedEffect(fix, basemapReady) {
+            val dotJson = pointsGeoJson(listOfNotNull(fix?.point))
+            val accuracyJson = fix?.takeIf { (it.accuracyM ?: 0f) > 0f }?.let { f ->
+                val acc = f.accuracyM ?: 0f
+                val ring = discRing(f.point.lat, f.point.lon, acc.toDouble(), steps = 48)
+                    .joinToString(",") { (lat, lon) -> "[$lon,$lat]" }
+                """{"type":"FeatureCollection","features":[{"type":"Feature",""" +
+                    """"geometry":{"type":"Polygon","coordinates":[[$ring]]},""" +
+                    """"properties":{}}]}"""
+            } ?: EMPTY_COLLECTION
+            mapView.getMapAsync { map ->
+                val style = map.style ?: return@getMapAsync
+                style.getSourceAs<GeoJsonSource>(POSITION_SOURCE)?.setGeoJson(dotJson)
+                style.getSourceAs<GeoJsonSource>(POSITION_ACCURACY_SOURCE)
+                    ?.setGeoJson(accuracyJson)
+            }
+        }
+
+        // A fresh fix moves the map to it. A one-shot event rather than state,
+        // so rotating the screen does not yank the map back.
+        LaunchedEffect(Unit) {
+            viewModel.centreOn.collect { point -> mapRef.value?.centreOn(point) }
         }
 
         // Push layer visibility to the style. Keyed on the toggle map and the
@@ -548,7 +613,9 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     // where routing matters most. Any open camera card is closed
                     // so the tap reads purely as a routing action.
                     map.addOnMapClickListener { point ->
-                        Log.d(TAG, "Map tapped at ${point.latitude},${point.longitude}")
+                        // No coordinates in the log: a tap is often where the
+                        // user is going.
+                        Log.d(TAG, "Map tapped")
                         selectedCameraId.value = null
                         selectedZoneId.value = null
                         viewModel.onMapTap(LatLon(point.latitude, point.longitude))
@@ -644,6 +711,46 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
             StatusCard(state = state, modifier = Modifier.fillMaxWidth())
         }
 
+        // Location is opt-in: nothing is asked at launch. The permission
+        // dialog appears only from the my-location button, and asks for both
+        // precise and approximate together, as Android 12+ requires for the
+        // "precise / approximate" choice to be offered.
+        val permissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) { grants ->
+            val activity = context as? Activity
+            when {
+                grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                    GpsFix.hasPrecisePermission(context) -> viewModel.locate()
+
+                grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+                    GpsFix.hasApproximatePermission(context) ->
+                    viewModel.reportLocationProblem(
+                        RouteViewModel.LocationState.Problem(
+                            "Approximate location can't place you on a street, and " +
+                                "SchattenWeg uses GPS only. Allow precise location " +
+                                "to use your position.",
+                            RouteViewModel.LocationState.Settings.APP,
+                        ),
+                    )
+
+                else -> {
+                    // After a denial Android stops showing the dialog once the
+                    // user has said no twice; only Settings can change it then.
+                    val canAskAgain = activity?.shouldShowRequestPermissionRationale(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                    ) == true
+                    viewModel.reportLocationProblem(
+                        RouteViewModel.LocationState.Problem(
+                            "Location not allowed. Your position is optional: " +
+                                "tap the map to pick a start instead.",
+                            if (canAskAgain) null else RouteViewModel.LocationState.Settings.APP,
+                        ),
+                    )
+                }
+            }
+        }
+
         // Layers toggle + zoom controls, clear of both cards.
         Column(
             Modifier
@@ -665,6 +772,24 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                 } else {
                     layersOn[LayerGroup.BUILDINGS] = true
                     layersOn[LayerGroup.BUILDINGS_3D] = true
+                }
+            }
+            LocationButton(
+                active = location is RouteViewModel.LocationState.Fixed,
+                busy = location is RouteViewModel.LocationState.Locating,
+            ) {
+                when {
+                    location is RouteViewModel.LocationState.Locating ->
+                        viewModel.cancelLocate()
+
+                    GpsFix.hasPrecisePermission(context) -> viewModel.locate()
+
+                    else -> permissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                        ),
+                    )
                 }
             }
             ZoomButton("\u2261") { panelOpen.value = !panelOpen.value }
@@ -712,6 +837,26 @@ fun MapScreen(viewModel: RouteViewModel = viewModel()) {
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
 
+            LocationCard(
+                state = location,
+                onCentre = { point -> mapRef.value?.centreOn(point) },
+                onStartHere = { viewModel.startFromPosition() },
+                onCancel = { viewModel.cancelLocate() },
+                onDismiss = { viewModel.clearLocation() },
+                onOpenSettings = { target ->
+                    val intent = when (target) {
+                        RouteViewModel.LocationState.Settings.APP -> Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", context.packageName, null),
+                        )
+
+                        RouteViewModel.LocationState.Settings.LOCATION ->
+                            Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                    }
+                    runCatching { context.startActivity(intent) }
+                        .onFailure { Log.w(TAG, "No settings screen for $target", it) }
+                },
+            )
             selectedCamera?.let { cam ->
                 CameraInfoCard(cam) { selectedCameraId.value = null }
             }
@@ -1224,6 +1369,130 @@ private fun CompassButton(bearing: Double, onClick: () -> Unit) {
 }
 
 /**
+ * Asks GPS for the user's position (and, the first time, for the permission).
+ * Blue while a position is shown; "…" while a fix is being sought, when a
+ * second tap cancels it.
+ */
+@Composable
+private fun LocationButton(active: Boolean, busy: Boolean, onClick: () -> Unit) {
+    Card(
+        Modifier
+            .size(44.dp)
+            .semantics {
+                contentDescription = "My location"
+                stateDescription = when {
+                    busy -> "Finding position, tap to cancel"
+                    active -> "Position shown"
+                    else -> "Off"
+                }
+            }
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (active) Color(0xFF2B5F95) else Color(0xE6161B22),
+        ),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                if (busy) "\u2026" else "\u25CE",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color(0xFFF2F4F8),
+            )
+        }
+    }
+}
+
+/**
+ * What the my-location button found: the position with its two actions, a
+ * GPS search in progress, or why there is no position. Hidden when idle.
+ */
+@Composable
+private fun LocationCard(
+    state: RouteViewModel.LocationState,
+    onCentre: (LatLon) -> Unit,
+    onStartHere: () -> Unit,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+    onOpenSettings: (RouteViewModel.LocationState.Settings) -> Unit,
+) {
+    if (state is RouteViewModel.LocationState.Idle) return
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xE6161B22)),
+    ) {
+        Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            when (state) {
+                RouteViewModel.LocationState.Idle -> Unit
+
+                RouteViewModel.LocationState.Locating -> {
+                    Text(
+                        "Finding your position with GPS\u2026",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFF2F4F8),
+                    )
+                    CardActions("Cancel" to onCancel)
+                }
+
+                is RouteViewModel.LocationState.Fixed -> {
+                    Text(
+                        state.accuracyM?.let { "Your position (\u00B1${it.roundToInt()} m)" }
+                            ?: "Your position",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFF2F4F8),
+                    )
+                    Text(
+                        "From GPS, on this phone only. Not saved.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF9AA4B2),
+                    )
+                    CardActions(
+                        "Start route here" to onStartHere,
+                        "Centre" to { onCentre(state.point) },
+                        "Hide" to onDismiss,
+                    )
+                }
+
+                is RouteViewModel.LocationState.Problem -> {
+                    Text(
+                        state.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFF2F4F8),
+                    )
+                    val settings = state.settings
+                    if (settings != null) {
+                        CardActions(
+                            "Open settings" to { onOpenSettings(settings) },
+                            "Dismiss" to onDismiss,
+                        )
+                    } else {
+                        CardActions("Dismiss" to onDismiss)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardActions(vararg actions: Pair<String, () -> Unit>) {
+    Row(
+        Modifier.padding(top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        for ((label, action) in actions) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF7FD4A2),
+                modifier = Modifier.clickable(onClick = action),
+            )
+        }
+    }
+}
+
+/**
  * Toggles between the tilted 3D view and the flat bird's-eye view. Lit green
  * while 3D is on so the state reads at a glance.
  */
@@ -1444,6 +1713,17 @@ private fun MapLibreMap.viewportRadiusM(): Double {
     // getLonEast() are plain functions, not synthesised properties.
     val corner = LatLng(bounds.latitudeNorth, bounds.longitudeEast)
     return centre.distanceTo(corner).coerceIn(500.0, 40_000.0)
+}
+
+/** Move the map to [point], zooming in to street level unless already closer. */
+private fun MapLibreMap.centreOn(point: LatLon) {
+    animateCamera(
+        CameraUpdateFactory.newLatLngZoom(
+            MlLatLng(point.lat, point.lon),
+            max(cameraPosition.zoom, POSITION_ZOOM),
+        ),
+        600,
+    )
 }
 
 /**
